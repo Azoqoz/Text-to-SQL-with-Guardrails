@@ -1,0 +1,9 @@
+pytest>=8.0,<9.0
+python-dotenv>=1.0,<2.0
+sqlglot>=25.0,<30.0
+openai
+anthropic
+google-genai
+ollama
+streamlit>=1.40,<2.0
+pandas>=2.2,<3.0
