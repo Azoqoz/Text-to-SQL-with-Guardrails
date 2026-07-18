@@ -136,6 +136,8 @@ Orders cover 2024 and 2025 with multiple regions and order statuses. The dataset
 
 Cloud providers require the user's own API key. Ollama requires a local Ollama server. API keys are entered through the UI or environment variables and are never committed.
 
+Ollama can be used locally without an API key. It is not available in the hosted Streamlit demo unless a remotely accessible Ollama server is configured.
+
 Example model names vary by provider and availability. Enter the model name you intend to use in the UI.
 
 ## Extensibility and Real-World Use
