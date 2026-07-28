@@ -322,6 +322,3 @@ Python, Streamlit, SQLite, SQLGlot, Pandas, Pytest, OpenAI SDK, Google GenAI SDK
 
 The application includes a safe hosted demo mode and a separate local full-provider mode. Public Demo Mode exercises the complete backend security pipeline without collecting visitor API keys or calling external providers.
 
-## CV Bullet
-
-Built a secure multi-provider Text-to-SQL application that translates natural-language business questions into SQLite queries, validates generated SQL through AST-based guardrails, enforces role-based table, column, and row-level permissions, and executes only authorized queries through a read-only database connection.
