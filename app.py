@@ -5,10 +5,16 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.config import AppSettings
+from src.config import AppSettings, ApplicationMode
 from src.database import SQLiteReadOnlyDatabase
 from src.models import TextToSQLRequest
-from src.providers import ProviderType, create_provider
+from src.providers import (
+    DemoTextToSQLProvider,
+    LLMConfigurationError,
+    LLMProviderError,
+    ProviderType,
+    create_provider,
+)
 from src.rbac import UserContext, UserRole
 from src.service import TextToSQLService
 
@@ -20,6 +26,7 @@ PROVIDER_LABELS = {
     "Ollama": ProviderType.OLLAMA,
 }
 PROVIDER_DISPLAY_NAMES = {
+    ProviderType.DEMO: "Secure Demo",
     ProviderType.OPENAI: "OpenAI",
     ProviderType.GEMINI: "Gemini",
     ProviderType.ANTHROPIC: "Claude",
@@ -70,6 +77,15 @@ EXAMPLE_QUESTIONS = {
     ],
 }
 QUESTION_STATE_KEY = "question_text"
+PUBLIC_DEMO_SECURITY_NOTICE = (
+    "This hosted demo does not collect or process user API keys. It uses a deterministic "
+    "local demo provider, while SQL guardrails, RBAC, row-level security, and read-only "
+    "execution remain fully active."
+)
+LOCAL_FULL_SECURITY_NOTICE = (
+    "Local full mode supports external providers. API keys are used only to construct "
+    "the selected provider for the current request and are not written to project files."
+)
 
 
 @st.cache_resource
@@ -105,6 +121,7 @@ def main() -> None:
         st.error("Sample database was not found. Run `py scripts/create_sample_db.py` first.")
         return
 
+    render_mode_status(settings)
     provider_type, model_name, api_key, ollama_host = render_provider_sidebar(settings)
     user = render_user_sidebar()
     render_database_sidebar(database, settings, user)
@@ -121,7 +138,14 @@ def main() -> None:
         height=20,
     )
 
-    validation_message = get_ui_validation_message(question, provider_type, model_name, api_key, user)
+    validation_message = get_ui_validation_message(
+        question,
+        provider_type,
+        model_name,
+        api_key,
+        user,
+        settings.app_mode,
+    )
     if validation_message:
         st.info(validation_message)
 
@@ -133,7 +157,8 @@ def main() -> None:
 
     if submitted:
         try:
-            provider = create_provider(
+            provider = create_application_provider(
+                settings=settings,
                 provider_type=provider_type,
                 model_name=model_name,
                 api_key=api_key or None,
@@ -143,6 +168,9 @@ def main() -> None:
             request = TextToSQLRequest(question=question, user=user)
         except ValueError as exc:
             st.error(str(exc))
+            return
+        except LLMProviderError:
+            st.error("Provider configuration could not be initialized safely.")
             return
 
         with st.spinner("Generating, validating, authorizing, and executing SQL..."):
@@ -159,7 +187,14 @@ def main() -> None:
 
 def render_provider_sidebar(settings: AppSettings) -> tuple[ProviderType, str, str, str]:
     st.sidebar.header("Model Configuration")
+    if settings.is_public_demo:
+        st.sidebar.markdown("**Provider: Secure Demo**")
+        st.sidebar.caption("Mode: Public demo — no API key required")
+        st.sidebar.info(PUBLIC_DEMO_SECURITY_NOTICE)
+        return ProviderType.DEMO, DemoTextToSQLProvider.model_name, "", settings.ollama_host
+
     st.sidebar.caption("Choose a provider and model. Cloud providers require your own API key.")
+    st.sidebar.info(LOCAL_FULL_SECURITY_NOTICE)
     default_label = next(
         label for label, provider_type in PROVIDER_LABELS.items() if provider_type == settings.default_provider
     )
@@ -187,6 +222,40 @@ def render_provider_sidebar(settings: AppSettings) -> tuple[ProviderType, str, s
         api_key = st.sidebar.text_input("API key", type="password")
 
     return provider_type, model_name, api_key, ollama_host
+
+
+def render_mode_status(settings: AppSettings) -> None:
+    if settings.is_public_demo:
+        st.markdown("**Public Demo · No API key required**")
+        st.caption(
+            "This deployment demonstrates the complete security pipeline without collecting visitor secrets."
+        )
+
+
+def create_application_provider(
+    settings: AppSettings,
+    provider_type: ProviderType,
+    model_name: str,
+    api_key: str,
+    ollama_host: str,
+):
+    if settings.is_public_demo:
+        return DemoTextToSQLProvider()
+    try:
+        return create_provider(
+            provider_type=provider_type,
+            model_name=model_name,
+            api_key=api_key or None,
+            ollama_host=ollama_host,
+        )
+    except LLMProviderError:
+        raise
+    except Exception as exc:
+        raise LLMConfigurationError("Selected provider could not be initialized.") from exc
+
+
+def is_api_key_input_enabled(settings: AppSettings) -> bool:
+    return settings.is_local_full
 
 
 def render_user_sidebar() -> UserContext:
@@ -237,9 +306,17 @@ def get_ui_validation_message(
     model_name: str,
     api_key: str,
     user: UserContext,
+    app_mode: ApplicationMode = ApplicationMode.LOCAL_FULL,
 ) -> str | None:
     if not question.strip():
         return "Enter a question to continue."
+    if app_mode == ApplicationMode.PUBLIC_DEMO:
+        if not DemoTextToSQLProvider.supports_question(question):
+            return (
+                "This public demo currently supports only the example questions shown "
+                "in the sidebar."
+            )
+        return None
     if not model_name.strip():
         return "Enter a model name to continue."
     if provider_type != ProviderType.OLLAMA and not api_key.strip():

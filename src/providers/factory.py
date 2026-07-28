@@ -4,6 +4,7 @@ from enum import Enum
 
 from src.providers.anthropic_provider import AnthropicTextToSQLProvider
 from src.providers.base import TextToSQLProvider
+from src.providers.demo_provider import DemoTextToSQLProvider
 from src.providers.gemini_provider import GeminiTextToSQLProvider
 from src.providers.models import LLMConfigurationError
 from src.providers.ollama_provider import OllamaTextToSQLProvider
@@ -11,6 +12,7 @@ from src.providers.openai_provider import OpenAITextToSQLProvider
 
 
 class ProviderType(str, Enum):
+    DEMO = "demo"
     OPENAI = "openai"
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
@@ -25,6 +27,8 @@ def create_provider(
 ) -> TextToSQLProvider:
     provider = _normalize_provider_type(provider_type)
 
+    if provider == ProviderType.DEMO:
+        return DemoTextToSQLProvider()
     if provider == ProviderType.OPENAI:
         return OpenAITextToSQLProvider(api_key=_require_api_key(api_key, provider), model_name=model_name)
     if provider == ProviderType.GEMINI:

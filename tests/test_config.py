@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from src.models import TextToSQLResponse
-from src.config import AppSettings
+from src.config import AppSettings, ApplicationMode
 from src.providers import ProviderType
 from src.rbac import UserRole
 
@@ -14,6 +14,7 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     for key in (
         "DATABASE_PATH",
+        "APP_MODE",
         "MAX_RESULT_ROWS",
         "LLM_PROVIDER",
         "OPENAI_API_KEY",
@@ -31,10 +32,41 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 def test_default_settings_load_correctly() -> None:
     settings = AppSettings.from_env()
 
+    assert settings.app_mode == ApplicationMode.PUBLIC_DEMO
+    assert settings.is_public_demo is True
+    assert settings.is_local_full is False
     assert settings.database_path == Path("data/company.db")
     assert settings.max_result_rows == 200
-    assert settings.default_provider == ProviderType.OPENAI
+    assert settings.default_provider == ProviderType.DEMO
     assert settings.ollama_host == "http://localhost:11434"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("PuBlIc_DeMo", ApplicationMode.PUBLIC_DEMO),
+        ("LoCaL_FuLl", ApplicationMode.LOCAL_FULL),
+    ],
+)
+def test_application_modes_are_case_insensitive(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+    expected: ApplicationMode,
+) -> None:
+    monkeypatch.setenv("APP_MODE", value)
+
+    settings = AppSettings.from_env()
+
+    assert settings.app_mode == expected
+    assert settings.is_public_demo is (expected == ApplicationMode.PUBLIC_DEMO)
+    assert settings.is_local_full is (expected == ApplicationMode.LOCAL_FULL)
+
+
+def test_invalid_application_mode_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_MODE", "hosted_with_keys")
+
+    with pytest.raises(ValueError, match="Unsupported APP_MODE"):
+        AppSettings.from_env()
 
 
 def test_custom_database_path_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,12 +93,14 @@ def test_invalid_max_result_rows_are_rejected(
 
 
 def test_provider_names_are_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
     monkeypatch.setenv("LLM_PROVIDER", "GeMiNi")
 
     assert AppSettings.from_env().default_provider == ProviderType.GEMINI
 
 
 def test_unsupported_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
     monkeypatch.setenv("LLM_PROVIDER", "unsupported")
 
     with pytest.raises(ValueError):
@@ -74,12 +108,14 @@ def test_unsupported_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_valid_ollama_host_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
     monkeypatch.setenv("OLLAMA_HOST", "https://ollama.example.test")
 
     assert AppSettings.from_env().ollama_host == "https://ollama.example.test"
 
 
 def test_invalid_ollama_host_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
     monkeypatch.setenv("OLLAMA_HOST", "localhost:11434")
 
     with pytest.raises(ValueError):
@@ -87,11 +123,27 @@ def test_invalid_ollama_host_is_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_api_keys_are_not_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
     monkeypatch.setenv("LLM_PROVIDER", "openai")
 
     settings = AppSettings.from_env()
 
     assert settings.default_provider == ProviderType.OPENAI
+
+
+def test_public_demo_ignores_local_provider_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_MODE", "public_demo")
+    monkeypatch.setenv("LLM_PROVIDER", "unsupported")
+    monkeypatch.setenv("OLLAMA_HOST", "not-a-url")
+    monkeypatch.setenv("OPENAI_MODEL", "must-not-be-read")
+
+    settings = AppSettings.from_env()
+
+    assert settings.default_provider == ProviderType.DEMO
+    assert settings.openai_model == ""
+    assert settings.ollama_host == "http://localhost:11434"
 
 
 def test_settings_representation_does_not_include_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,6 +173,7 @@ def test_provider_display_name_mapping() -> None:
     assert module.get_provider_display_name(ProviderType.GEMINI) == "Gemini"
     assert module.get_provider_display_name(ProviderType.ANTHROPIC) == "Claude"
     assert module.get_provider_display_name(ProviderType.OLLAMA) == "Ollama"
+    assert module.get_provider_display_name(ProviderType.DEMO) == "Secure Demo"
 
 
 def test_example_question_update_contains_only_question_state() -> None:
@@ -131,6 +184,98 @@ def test_example_question_update_contains_only_question_state() -> None:
     assert update == {"question_text": "Show customer revenue"}
     assert "api_key" not in update
     assert "OPENAI_API_KEY" not in update
+
+
+def test_public_demo_disables_api_key_input_and_rejects_unknown_questions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_MODE", "public_demo")
+    module = importlib.import_module("app")
+    settings = AppSettings.from_env()
+    user = module.UserContext(user_id="analyst", role=UserRole.SALES_ANALYST)
+
+    assert module.is_api_key_input_enabled(settings) is False
+    assert module.get_ui_validation_message(
+        "Invent an arbitrary query",
+        ProviderType.DEMO,
+        "secure-demo-generator",
+        "",
+        user,
+        ApplicationMode.PUBLIC_DEMO,
+    ) == "This public demo currently supports only the example questions shown in the sidebar."
+
+
+def test_public_demo_constructs_demo_without_calling_cloud_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_MODE", "public_demo")
+    module = importlib.import_module("app")
+    settings = AppSettings.from_env()
+
+    def fail_factory(**kwargs):
+        raise AssertionError("Cloud provider factory must not be called")
+
+    monkeypatch.setattr(module, "create_provider", fail_factory)
+    provider = module.create_application_provider(
+        settings,
+        ProviderType.OPENAI,
+        "ignored-model",
+        "ignored-secret",
+        "https://ignored.example",
+    )
+
+    assert provider.provider_name == "demo"
+    assert not hasattr(provider, "_client")
+
+
+def test_local_full_keeps_provider_factory_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
+    module = importlib.import_module("app")
+    settings = AppSettings.from_env()
+    captured: dict[str, object] = {}
+
+    def fake_factory(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(module, "create_provider", fake_factory)
+    module.create_application_provider(
+        settings,
+        ProviderType.OPENAI,
+        "local-model",
+        "local-secret",
+        "http://localhost:11434",
+    )
+
+    assert module.is_api_key_input_enabled(settings) is True
+    assert captured["provider_type"] == ProviderType.OPENAI
+    assert captured["api_key"] == "local-secret"
+
+
+def test_local_provider_initialization_error_does_not_expose_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_MODE", "local_full")
+    module = importlib.import_module("app")
+    settings = AppSettings.from_env()
+    secret = "local-secret-must-not-leak"
+
+    def failing_factory(**kwargs):
+        raise RuntimeError(f"SDK failed with {secret}")
+
+    monkeypatch.setattr(module, "create_provider", failing_factory)
+    with pytest.raises(module.LLMConfigurationError) as exc_info:
+        module.create_application_provider(
+            settings,
+            ProviderType.OPENAI,
+            "local-model",
+            secret,
+            "http://localhost:11434",
+        )
+
+    assert secret not in str(exc_info.value)
 
 
 def test_csv_creation_includes_only_authorized_result_rows() -> None:

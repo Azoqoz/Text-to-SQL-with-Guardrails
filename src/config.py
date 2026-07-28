@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,8 +10,14 @@ from dotenv import load_dotenv
 from src.providers import ProviderType
 
 
+class ApplicationMode(str, Enum):
+    PUBLIC_DEMO = "public_demo"
+    LOCAL_FULL = "local_full"
+
+
 @dataclass(frozen=True)
 class AppSettings:
+    app_mode: ApplicationMode
     database_path: Path
     max_result_rows: int
     default_provider: ProviderType
@@ -20,25 +27,55 @@ class AppSettings:
     ollama_model: str
     ollama_host: str
 
+    @property
+    def is_public_demo(self) -> bool:
+        return self.app_mode == ApplicationMode.PUBLIC_DEMO
+
+    @property
+    def is_local_full(self) -> bool:
+        return self.app_mode == ApplicationMode.LOCAL_FULL
+
     @classmethod
     def from_env(cls) -> AppSettings:
         load_dotenv()
+        app_mode = _parse_app_mode(os.getenv("APP_MODE", ApplicationMode.PUBLIC_DEMO.value))
         max_result_rows = _parse_max_result_rows(os.getenv("MAX_RESULT_ROWS", "200"))
-        default_provider = _parse_provider(os.getenv("LLM_PROVIDER", "openai"))
-        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        if not (ollama_host.startswith("http://") or ollama_host.startswith("https://")):
-            raise ValueError("OLLAMA_HOST must start with http:// or https://")
+        if app_mode == ApplicationMode.PUBLIC_DEMO:
+            default_provider = ProviderType.DEMO
+            openai_model = ""
+            gemini_model = ""
+            anthropic_model = ""
+            ollama_model = ""
+            ollama_host = "http://localhost:11434"
+        else:
+            default_provider = _parse_provider(os.getenv("LLM_PROVIDER", "openai"))
+            openai_model = os.getenv("OPENAI_MODEL", "")
+            gemini_model = os.getenv("GEMINI_MODEL", "")
+            anthropic_model = os.getenv("ANTHROPIC_MODEL", "")
+            ollama_model = os.getenv("OLLAMA_MODEL", "")
+            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            if not (ollama_host.startswith("http://") or ollama_host.startswith("https://")):
+                raise ValueError("OLLAMA_HOST must start with http:// or https://")
 
         return cls(
+            app_mode=app_mode,
             database_path=Path(os.getenv("DATABASE_PATH", "data/company.db")),
             max_result_rows=max_result_rows,
             default_provider=default_provider,
-            openai_model=os.getenv("OPENAI_MODEL", ""),
-            gemini_model=os.getenv("GEMINI_MODEL", ""),
-            anthropic_model=os.getenv("ANTHROPIC_MODEL", ""),
-            ollama_model=os.getenv("OLLAMA_MODEL", ""),
+            openai_model=openai_model,
+            gemini_model=gemini_model,
+            anthropic_model=anthropic_model,
+            ollama_model=ollama_model,
             ollama_host=ollama_host,
         )
+
+
+def _parse_app_mode(value: str) -> ApplicationMode:
+    try:
+        return ApplicationMode(value.strip().lower())
+    except ValueError as exc:
+        accepted = ", ".join(mode.value for mode in ApplicationMode)
+        raise ValueError(f"Unsupported APP_MODE: {value}. Expected one of: {accepted}") from exc
 
 
 def _parse_max_result_rows(value: str) -> int:

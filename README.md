@@ -8,12 +8,12 @@ This project is designed for an authorized internal business employee asking nat
 
 ## Demo Workflow
 
-User Question -> Role-Filtered Schema -> Selected LLM Provider -> Generated SQL -> SQLGlot Guardrails -> RBAC Enforcement -> Read-only SQLite Execution -> Results
+User Question -> Role-Filtered Schema -> Selected Provider -> Generated SQL -> SQLGlot Guardrails -> RBAC Enforcement -> Read-only SQLite Execution -> Results
 
 ## Key Features
 
 - Multi-provider LLM support
-- OpenAI, Gemini, Claude, and Ollama
+- Secure public demo provider plus OpenAI, Gemini, Claude, and Ollama in local mode
 - SQLite schema inspection
 - Role-filtered schema exposure
 - AST-based SQL validation
@@ -129,16 +129,40 @@ Orders cover 2024 and 2025 with multiple regions and order statuses. The dataset
 
 ## Supported Providers
 
+- Secure Demo Provider in Public Demo Mode
 - OpenAI
 - Gemini
 - Claude via Anthropic
 - Ollama locally
 
-Cloud providers require the user's own API key. Ollama requires a local Ollama server. API keys are entered through the UI or environment variables and are never committed.
+OpenAI, Gemini, Claude, and Ollama are available in Local Full Mode. Cloud providers require the user's own API key, entered in the local UI for the current request. Ollama requires a local Ollama server and no API key.
 
-Ollama can be used locally without an API key. It is not available in the hosted Streamlit demo unless a remotely accessible Ollama server is configured.
+Provider objects are constructed per request and are not cached. The application does not write API keys to project files, settings, databases, or explicit Streamlit session-state helpers. This UI behavior is not a substitute for production secret management.
 
 Example model names vary by provider and availability. Enter the model name you intend to use in the UI.
+
+## Hosted Demo Security
+
+The hosted Streamlit application runs in Public Demo Mode. It does not request, accept, or process visitors' API keys and makes no external provider calls. Instead, it uses a deterministic local provider for the documented example questions.
+
+The demo is not a simulated security result: generated SQL still passes through the real SQLGlot guardrails, RBAC enforcement, row-level security rewriting, and read-only SQLite execution. Generated SQL and authorized SQL remain visible separately.
+
+Full OpenAI, Gemini, Claude, and Ollama support remains available in Local Full Mode. Cloud providers require the user's own API key when running locally; Ollama works locally without an API key. Public Demo Mode intentionally supports only the documented sidebar questions.
+
+| Mode | External API Keys | Providers | Intended Use |
+| --- | --- | --- | --- |
+| Public Demo | Not accepted | Secure Demo Provider | Hosted portfolio demo |
+| Local Full | User supplied locally | OpenAI, Gemini, Claude, Ollama | Full local experimentation |
+
+### Streamlit deployment
+
+The public Streamlit deployment should use:
+
+```toml
+APP_MODE = "public_demo"
+```
+
+It should not configure `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`. Because `public_demo` is the safe default, no Streamlit secret is required when no other configuration is needed.
 
 ## Extensibility and Real-World Use
 
@@ -159,6 +183,7 @@ py -m venv .venv
 .venv\Scripts\activate
 py -m pip install -r requirements.txt
 py scripts/create_sample_db.py
+$env:APP_MODE = "local_full"
 py -m streamlit run app.py
 ```
 
@@ -169,7 +194,22 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python scripts/create_sample_db.py
+export APP_MODE=local_full
 python -m streamlit run app.py
+```
+
+For safe public demo behavior, use `APP_MODE=public_demo` or omit `APP_MODE` entirely. For the full local provider UI, use `APP_MODE=local_full`.
+
+PowerShell launch commands:
+
+```powershell
+# Public demo (also the default when APP_MODE is absent)
+$env:APP_MODE = "public_demo"
+py -m streamlit run app.py
+
+# Full local providers
+$env:APP_MODE = "local_full"
+py -m streamlit run app.py
 ```
 
 ## Environment Configuration
@@ -177,25 +217,24 @@ python -m streamlit run app.py
 `.env.example`:
 
 ```env
+APP_MODE=local_full
+
 DATABASE_PATH=data/company.db
 MAX_RESULT_ROWS=200
 
 LLM_PROVIDER=openai
 
-OPENAI_API_KEY=
 OPENAI_MODEL=
 
-GEMINI_API_KEY=
 GEMINI_MODEL=
 
-ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
 
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=
 ```
 
-Users can also enter API keys and model names directly through the Streamlit UI without editing `.env`.
+`APP_MODE` accepts `public_demo` and `local_full` case-insensitively and defaults to `public_demo`. API keys are deliberately not part of `AppSettings`; in Local Full Mode, cloud-provider keys are entered through the password-style UI field for the current request.
 
 ## Example Questions
 
@@ -259,6 +298,7 @@ The external temp folder is only a workaround for local Windows permission issue
 - No query cost estimator
 - No sensitive-data masking beyond configured permissions
 - API availability and model names vary by provider
+- Public Demo Mode supports only the documented example questions
 - Production integration requires database-specific testing, authentication, secrets management, auditing, least-privilege credentials, rate limiting, and stronger authorization integration
 
 ## Future Improvements
@@ -280,7 +320,7 @@ Python, Streamlit, SQLite, SQLGlot, Pandas, Pytest, OpenAI SDK, Google GenAI SDK
 
 ## Project Status
 
-The local application is complete, and the automated test suite currently includes 146 passing tests. Public deployment has not been added.
+The application includes a safe hosted demo mode and a separate local full-provider mode. Public Demo Mode exercises the complete backend security pipeline without collecting visitor API keys or calling external providers.
 
 ## CV Bullet
 

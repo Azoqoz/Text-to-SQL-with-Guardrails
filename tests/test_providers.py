@@ -91,6 +91,7 @@ def test_base_input_validation_rejects_empty_question_and_schema() -> None:
 
 
 def test_factory_creates_all_provider_types() -> None:
+    assert create_provider(ProviderType.DEMO, "ignored").provider_name == "demo"
     assert create_provider(ProviderType.OPENAI, "model", api_key="key").provider_name == "openai"
     assert create_provider(ProviderType.GEMINI, "model", api_key="key").provider_name == "gemini"
     assert create_provider(ProviderType.ANTHROPIC, "model", api_key="key").provider_name == "anthropic"
