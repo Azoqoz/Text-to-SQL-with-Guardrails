@@ -186,6 +186,109 @@ def test_example_question_update_contains_only_question_state() -> None:
     assert "OPENAI_API_KEY" not in update
 
 
+def test_demo_question_update_contains_only_selected_question_state() -> None:
+    module = importlib.import_module("app")
+    question = module.EXAMPLE_QUESTIONS[UserRole.SALES_ANALYST][0]
+
+    update = module.get_demo_question_session_state_update(question)
+
+    assert update == {"selected_demo_question": question}
+    assert "api_key" not in update
+    assert "OPENAI_API_KEY" not in update
+
+
+def test_public_demo_uses_role_specific_question_selection() -> None:
+    module = importlib.import_module("app")
+    analyst_question = module.EXAMPLE_QUESTIONS[UserRole.SALES_ANALYST][0]
+    manager_question = module.EXAMPLE_QUESTIONS[UserRole.SALES_MANAGER][0]
+
+    assert module.uses_unrestricted_question_input(ApplicationMode.PUBLIC_DEMO) is False
+    assert module.is_role_supported_demo_question(
+        analyst_question,
+        UserRole.SALES_ANALYST,
+    ) is True
+    assert module.is_role_supported_demo_question(
+        manager_question,
+        UserRole.SALES_ANALYST,
+    ) is False
+    assert len(module.EXAMPLE_QUESTIONS[UserRole.SALES_ANALYST]) == 4
+
+
+def test_public_demo_selected_question_display_is_compact_and_explicit() -> None:
+    module = importlib.import_module("app")
+    question = module.EXAMPLE_QUESTIONS[UserRole.SALES_ANALYST][0]
+
+    assert (
+        module.get_selected_demo_question_display("")
+        == "Select one of the questions above."
+    )
+    assert module.get_selected_demo_question_display(question) == question
+
+
+def test_public_demo_has_no_visible_action_status_message() -> None:
+    module = importlib.import_module("app")
+
+    assert module.get_action_status_text(
+        ApplicationMode.PUBLIC_DEMO,
+        "Choose a demo question to continue.",
+    ) == ""
+
+
+def test_local_full_uses_fixed_height_muted_action_status_slot() -> None:
+    module = importlib.import_module("app")
+
+    assert module.ACTION_STATUS_SLOT_HEIGHT_PX == 16
+    assert (
+        module.get_action_status_text(
+            ApplicationMode.LOCAL_FULL,
+            "Enter a question to continue.",
+        )
+        == "Enter a question to continue."
+    )
+    assert module.get_action_status_text(ApplicationMode.LOCAL_FULL, None) == ""
+
+
+def test_role_change_clears_only_incompatible_demo_question() -> None:
+    module = importlib.import_module("app")
+    analyst_question = module.EXAMPLE_QUESTIONS[UserRole.SALES_ANALYST][0]
+
+    assert (
+        module.get_compatible_demo_question(analyst_question, UserRole.SALES_ANALYST)
+        == analyst_question
+    )
+    assert module.get_compatible_demo_question(analyst_question, UserRole.SALES_MANAGER) == ""
+
+
+def test_public_demo_sidebar_has_no_provider_or_example_question_sections() -> None:
+    module = importlib.import_module("app")
+
+    sections = module.get_sidebar_sections(ApplicationMode.PUBLIC_DEMO)
+
+    assert sections == ("Access Control", "Database")
+    assert "Model Configuration" not in sections
+    assert "Example Questions" not in sections
+    assert module.get_provider_control_names(ApplicationMode.PUBLIC_DEMO) == ()
+
+
+def test_local_full_keeps_unrestricted_input_and_provider_controls() -> None:
+    module = importlib.import_module("app")
+
+    assert module.uses_unrestricted_question_input(ApplicationMode.LOCAL_FULL) is True
+    assert module.get_question_column_count(ApplicationMode.LOCAL_FULL) == 4
+    assert module.get_question_column_count(ApplicationMode.PUBLIC_DEMO) == 4
+    assert module.get_sidebar_sections(ApplicationMode.LOCAL_FULL) == (
+        "Model Configuration",
+        "Access Control",
+        "Database",
+    )
+    assert module.get_provider_control_names(ApplicationMode.LOCAL_FULL) == (
+        "Provider",
+        "Model name",
+        "API key",
+        "Ollama host",
+    )
+
+
 def test_public_demo_disables_api_key_input_and_rejects_unknown_questions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -202,7 +305,7 @@ def test_public_demo_disables_api_key_input_and_rejects_unknown_questions(
         "",
         user,
         ApplicationMode.PUBLIC_DEMO,
-    ) == "This public demo currently supports only the example questions shown in the sidebar."
+    ) == "Choose one of the demo questions available for the selected role."
 
 
 def test_public_demo_constructs_demo_without_calling_cloud_factory(

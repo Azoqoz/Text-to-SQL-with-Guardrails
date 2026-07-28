@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -77,11 +78,8 @@ EXAMPLE_QUESTIONS = {
     ],
 }
 QUESTION_STATE_KEY = "question_text"
-PUBLIC_DEMO_SECURITY_NOTICE = (
-    "This hosted demo does not collect or process user API keys. It uses a deterministic "
-    "local demo provider, while SQL guardrails, RBAC, row-level security, and read-only "
-    "execution remain fully active."
-)
+DEMO_QUESTION_STATE_KEY = "selected_demo_question"
+ACTION_STATUS_SLOT_HEIGHT_PX = 16
 LOCAL_FULL_SECURITY_NOTICE = (
     "Local full mode supports external providers. API keys are used only to construct "
     "the selected provider for the current request and are not written to project files."
@@ -105,11 +103,6 @@ def main() -> None:
         layout="wide",
     )
     apply_compact_spacing()
-    st.title("Text-to-SQL with Guardrails")
-    st.caption(
-        "Secure multi-provider Text-to-SQL with SQL validation, read-only execution, and role-based access control."
-    )
-    st.caption("Natural language -> LLM -> SQL Guardrails -> RBAC -> Read-only SQLite")
 
     try:
         settings = load_settings()
@@ -121,22 +114,15 @@ def main() -> None:
         st.error("Sample database was not found. Run `py scripts/create_sample_db.py` first.")
         return
 
-    render_mode_status(settings)
+    render_app_header(settings)
     provider_type, model_name, api_key, ollama_host = render_provider_sidebar(settings)
     user = render_user_sidebar()
+    if settings.is_public_demo:
+        synchronize_demo_question_state(user.role)
     render_database_sidebar(database, settings, user)
-    render_examples(user.role)
 
     st.header("Ask the Database")
-    st.caption(
-        "Ask a business question in natural language. The system will generate, validate, authorize, and execute a read-only SQL query."
-    )
-    question = st.text_area(
-        "Ask a question about the company data",
-        key=QUESTION_STATE_KEY,
-        placeholder="Example: What are the top 5 products by total revenue?",
-        height=20,
-    )
+    question = render_question_input(settings.app_mode, user.role)
 
     validation_message = get_ui_validation_message(
         question,
@@ -146,8 +132,7 @@ def main() -> None:
         user,
         settings.app_mode,
     )
-    if validation_message:
-        st.info(validation_message)
+    render_action_status_slot(settings.app_mode, validation_message)
 
     submitted = st.button(
         "Generate, Validate & Run",
@@ -186,15 +171,11 @@ def main() -> None:
 
 
 def render_provider_sidebar(settings: AppSettings) -> tuple[ProviderType, str, str, str]:
-    st.sidebar.header("Model Configuration")
     if settings.is_public_demo:
-        st.sidebar.markdown("**Provider: Secure Demo**")
-        st.sidebar.caption("Mode: Public demo — no API key required")
-        st.sidebar.info(PUBLIC_DEMO_SECURITY_NOTICE)
         return ProviderType.DEMO, DemoTextToSQLProvider.model_name, "", settings.ollama_host
 
+    st.sidebar.header("Model Configuration")
     st.sidebar.caption("Choose a provider and model. Cloud providers require your own API key.")
-    st.sidebar.info(LOCAL_FULL_SECURITY_NOTICE)
     default_label = next(
         label for label, provider_type in PROVIDER_LABELS.items() if provider_type == settings.default_provider
     )
@@ -224,12 +205,22 @@ def render_provider_sidebar(settings: AppSettings) -> tuple[ProviderType, str, s
     return provider_type, model_name, api_key, ollama_host
 
 
-def render_mode_status(settings: AppSettings) -> None:
+def render_app_header(settings: AppSettings) -> None:
+    st.title("Text-to-SQL with Guardrails")
+    st.caption(
+        "Ask structured business questions safely through SQL validation, role-based "
+        "access control, and read-only execution."
+    )
+    st.markdown("`Question → SQL Generation → Guardrails → RBAC → Read-only Results`")
     if settings.is_public_demo:
-        st.markdown("**Public Demo · No API key required**")
+        st.markdown("**Secure Public Demo · No API Key Required**")
         st.caption(
-            "This deployment demonstrates the complete security pipeline without collecting visitor secrets."
+            "This hosted demo uses predefined business questions while the complete "
+            "security pipeline remains active."
         )
+    else:
+        st.markdown("**Local Full Mode · External Providers Enabled**")
+        st.caption(LOCAL_FULL_SECURITY_NOTICE)
 
 
 def create_application_provider(
@@ -293,11 +284,152 @@ def render_database_sidebar(
         st.code(database.get_schema_for_user(user), language="text")
 
 
-def render_examples(role: UserRole) -> None:
-    st.sidebar.header("Example Questions")
+def render_question_input(app_mode: ApplicationMode, role: UserRole) -> str:
+    st.caption(
+        "Select a business question to see how the system generates SQL, validates "
+        "it, applies access controls, and executes it safely."
+    )
+    st.subheader("Suggested Questions")
+
+    if app_mode == ApplicationMode.PUBLIC_DEMO:
+        st.caption(
+            "The hosted demo supports the questions below. Open-ended questions are "
+            "available in Local Full Mode."
+        )
+        render_question_buttons(
+            role=role,
+            state_key=DEMO_QUESTION_STATE_KEY,
+            key_prefix="demo_question",
+            column_count=get_question_column_count(app_mode),
+            equal_height=True,
+        )
+        selected_question = st.session_state.get(DEMO_QUESTION_STATE_KEY, "")
+        selected_display = escape(get_selected_demo_question_display(selected_question))
+        with st.container(key="question_input_area"):
+            st.markdown(
+                '<div class="selected-question-section">'
+                '<div class="selected-question-label">Selected Question</div>'
+                f'<div class="selected-question-panel" role="status">{selected_display}</div>'
+                '<div class="question-mode-note-slot">'
+                "Need open-ended questions? Run the project locally in Local Full Mode "
+                "with OpenAI, Gemini, Claude, or Ollama."
+                "</div></div>",
+                unsafe_allow_html=True,
+            )
+        return selected_question
+
+    st.caption("Choose a suggestion or enter an open-ended business question below.")
+    render_question_buttons(
+        role=role,
+        state_key=QUESTION_STATE_KEY,
+        key_prefix="local_question",
+        column_count=get_question_column_count(app_mode),
+        equal_height=True,
+    )
+    with st.container(key="question_input_area"):
+        question = st.text_area(
+            "Question",
+            key=QUESTION_STATE_KEY,
+            placeholder="Ask an open-ended question or choose a suggestion above",
+            height=48,
+        )
+        st.markdown(
+            '<div class="question-mode-note-slot" aria-hidden="true"></div>',
+            unsafe_allow_html=True,
+        )
+    return question
+
+
+def render_question_buttons(
+    role: UserRole,
+    state_key: str,
+    key_prefix: str,
+    column_count: int = 2,
+    equal_height: bool = False,
+) -> None:
+    if equal_height:
+        with st.container(key="question_button_grid"):
+            _render_question_button_columns(role, state_key, key_prefix, column_count)
+        return
+    _render_question_button_columns(role, state_key, key_prefix, column_count)
+
+
+def _render_question_button_columns(
+    role: UserRole,
+    state_key: str,
+    key_prefix: str,
+    column_count: int,
+) -> None:
+    columns = st.columns(column_count)
     for index, example in enumerate(EXAMPLE_QUESTIONS[role]):
-        if st.sidebar.button(example, key=f"example_{role.value}_{index}", use_container_width=True):
-            st.session_state.update(get_example_session_state_update(example))
+        if columns[index % column_count].button(
+            example,
+            key=f"{key_prefix}_{role.value}_{index}",
+            use_container_width=True,
+        ):
+            st.session_state.update(get_question_session_state_update(example, state_key))
+
+
+def synchronize_demo_question_state(role: UserRole) -> None:
+    selected_question = st.session_state.get(DEMO_QUESTION_STATE_KEY, "")
+    if selected_question and not get_compatible_demo_question(selected_question, role):
+        st.session_state.pop(DEMO_QUESTION_STATE_KEY, None)
+
+
+def get_compatible_demo_question(question: str, role: UserRole) -> str:
+    return question if question in EXAMPLE_QUESTIONS[role] else ""
+
+
+def is_role_supported_demo_question(question: str, role: UserRole) -> bool:
+    return bool(get_compatible_demo_question(question, role))
+
+
+def uses_unrestricted_question_input(app_mode: ApplicationMode) -> bool:
+    return app_mode == ApplicationMode.LOCAL_FULL
+
+
+def get_sidebar_sections(app_mode: ApplicationMode) -> tuple[str, ...]:
+    if app_mode == ApplicationMode.PUBLIC_DEMO:
+        return ("Access Control", "Database")
+    return ("Model Configuration", "Access Control", "Database")
+
+
+def get_provider_control_names(app_mode: ApplicationMode) -> tuple[str, ...]:
+    if app_mode == ApplicationMode.PUBLIC_DEMO:
+        return ()
+    return ("Provider", "Model name", "API key", "Ollama host")
+
+
+def get_question_column_count(app_mode: ApplicationMode) -> int:
+    return 4
+
+
+def get_selected_demo_question_display(question: str) -> str:
+    return question or "Select one of the questions above."
+
+
+def get_action_status_text(
+    app_mode: ApplicationMode,
+    validation_message: str | None,
+) -> str:
+    if app_mode == ApplicationMode.LOCAL_FULL and validation_message:
+        return validation_message
+    return ""
+
+
+def render_action_status_slot(
+    app_mode: ApplicationMode,
+    validation_message: str | None,
+) -> None:
+    status_text = escape(get_action_status_text(app_mode, validation_message))
+    slot_class = "action-status-slot"
+    if app_mode == ApplicationMode.LOCAL_FULL:
+        slot_class += " local-action-status-slot"
+    st.markdown(
+        f'<div class="{slot_class}" style="height: '
+        f'{ACTION_STATUS_SLOT_HEIGHT_PX}px">{status_text}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def get_ui_validation_message(
@@ -308,15 +440,14 @@ def get_ui_validation_message(
     user: UserContext,
     app_mode: ApplicationMode = ApplicationMode.LOCAL_FULL,
 ) -> str | None:
+    if app_mode == ApplicationMode.PUBLIC_DEMO:
+        if not question.strip():
+            return "Choose a demo question to continue."
+        if not is_role_supported_demo_question(question, user.role):
+            return "Choose one of the demo questions available for the selected role."
+        return None
     if not question.strip():
         return "Enter a question to continue."
-    if app_mode == ApplicationMode.PUBLIC_DEMO:
-        if not DemoTextToSQLProvider.supports_question(question):
-            return (
-                "This public demo currently supports only the example questions shown "
-                "in the sidebar."
-            )
-        return None
     if not model_name.strip():
         return "Enter a model name to continue."
     if provider_type != ProviderType.OLLAMA and not api_key.strip():
@@ -409,7 +540,15 @@ def get_role_display_name(role: UserRole | str) -> str:
 
 
 def get_example_session_state_update(question: str) -> dict[str, str]:
-    return {QUESTION_STATE_KEY: question}
+    return get_question_session_state_update(question, QUESTION_STATE_KEY)
+
+
+def get_demo_question_session_state_update(question: str) -> dict[str, str]:
+    return get_question_session_state_update(question, DEMO_QUESTION_STATE_KEY)
+
+
+def get_question_session_state_update(question: str, state_key: str) -> dict[str, str]:
+    return {state_key: question}
 
 
 def create_results_csv(rows: list[dict[str, object]]) -> str:
@@ -436,8 +575,79 @@ def apply_compact_spacing() -> None:
         div[data-testid="stVerticalBlock"] {
             gap: 0.65rem;
         }
-        div[data-testid="stTextArea"] textarea {
-            min-height: 84px;
+        .selected-question-section {
+            margin-top: 0;
+        }
+        .selected-question-label {
+            margin-bottom: 0.3rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .selected-question-panel {
+            display: flex;
+            align-items: center;
+            height: 48px;
+            min-height: 48px;
+            padding: 0.35rem 0.7rem;
+            box-sizing: border-box;
+            border: 1px solid rgba(128, 128, 128, 0.35);
+            border-radius: 0.5rem;
+            background: rgba(128, 128, 128, 0.08);
+            font-size: 0.9rem;
+            line-height: 1.2;
+            overflow: hidden;
+        }
+        .question-mode-note-slot {
+            height: 17px;
+            margin-top: 5px;
+            font-size: 0.875rem;
+            line-height: 17px;
+            opacity: 0.7;
+            overflow: hidden;
+        }
+        .st-key-question_input_area div[data-testid="stTextArea"] textarea {
+            height: 48px;
+            min-height: 48px;
+            padding: 0.35rem 0.7rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            line-height: 1.2;
+            resize: none;
+        }
+        .st-key-question_input_area div[data-testid="stVerticalBlock"] {
+            gap: 0;
+        }
+        .action-status-slot {
+            font-size: 0.8rem;
+            line-height: 16px;
+            opacity: 0.7;
+            overflow: hidden;
+        }
+        .local-action-status-slot {
+            margin-bottom: 7px;
+        }
+        .st-key-question_button_grid div[data-testid="stButton"] button {
+            height: 48px;
+            min-height: 48px;
+            padding: 0.25rem 0.5rem;
+            border: 1px solid rgba(128, 128, 128, 0.35);
+            border-radius: 0.5rem;
+            white-space: normal;
+            transition: background-color 120ms ease, border-color 120ms ease;
+        }
+        .st-key-question_button_grid div[data-testid="stButton"] button p {
+            display: -webkit-box;
+            margin: 0;
+            overflow: hidden;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            font-size: 0.875rem;
+            line-height: 1.15;
+            text-align: center;
+        }
+        .st-key-question_button_grid div[data-testid="stButton"] button:hover {
+            border-color: rgba(128, 128, 128, 0.65);
+            background: rgba(128, 128, 128, 0.10);
         }
         </style>
         """,
