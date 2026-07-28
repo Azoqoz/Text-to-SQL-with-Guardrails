@@ -1,87 +1,432 @@
 # Text-to-SQL with Guardrails
 
-A secure multi-provider Text-to-SQL application that converts natural-language business questions into SQLite queries, validates them through AST-based SQL guardrails, enforces role-based access control, and executes only authorized queries through a read-only database connection.
+A secure multi-provider Text-to-SQL application that converts natural-language business questions into authorized SQLite queries using AST-based validation, role-based access control, row-level security, and read-only database execution.
+
+![Python](https://img.shields.io/badge/Language-Python-blue)
+![Streamlit](https://img.shields.io/badge/Framework-Streamlit-red)
+![SQLite](https://img.shields.io/badge/Database-SQLite-lightblue)
+![SQLGlot](https://img.shields.io/badge/SQL%20Validation-SQLGlot-purple)
+![Security](https://img.shields.io/badge/Security-RBAC%20%2B%20Guardrails-green)
+![Tests](https://img.shields.io/badge/Testing-Pytest-orange)
+
+---
 
 ## Overview
 
-This project is designed for an authorized internal business employee asking natural-language questions over structured company data. The application sends only a role-filtered schema to the selected LLM provider, keeps generated SQL transparent, and never executes generated SQL directly. Before execution, SQLGlot guardrails and backend RBAC apply table, column, and row-level controls.
+Text-to-SQL with Guardrails is a secure natural-language analytics application designed for authorized employees who need to explore structured business data without writing SQL manually.
 
-## Demo Workflow
+The application converts a user question into SQL using a selected LLM provider. Generated SQL is never executed directly.
 
-User Question -> Role-Filtered Schema -> Selected Provider -> Generated SQL -> SQLGlot Guardrails -> RBAC Enforcement -> Read-only SQLite Execution -> Results
+Before database execution, the system:
+
+- Parses the query using SQLGlot
+- Enforces a single-statement policy
+- Allows only `SELECT` operations
+- Validates requested tables and columns
+- Applies role-based access control
+- Injects row-level security restrictions when required
+- Re-validates the rewritten SQL
+- Executes the authorized query through a read-only SQLite connection
+- Limits the number of returned rows
+
+The generated SQL and the final authorized SQL remain visible separately, making the security process transparent to the user.
+
+---
 
 ## Key Features
 
-- Multi-provider LLM support
-- Secure public demo provider plus OpenAI, Gemini, Claude, and Ollama in local mode
-- SQLite schema inspection
-- Role-filtered schema exposure
-- AST-based SQL validation
-- SELECT-only policy
-- Table allowlisting
-- Column-level permissions
-- Row-level security
-- Read-only execution
-- Result limiting
-- Generated and authorized SQL transparency
-- Streamlit UI
-- Safe error handling
-- Automated tests
+- Convert natural-language questions into SQL
+- Support OpenAI, Gemini, Claude, and Ollama
+- Provide a secure local demo provider for hosted demonstrations
+- Inspect the SQLite database schema automatically
+- Expose only role-authorized schema information to the LLM
+- Parse generated SQL into an Abstract Syntax Tree
+- Enforce a one-statement policy
+- Allow only read-only `SELECT` queries
+- Block unauthorized tables
+- Block unauthorized columns
+- Apply backend-enforced row-level security
+- Re-validate SQL after security rewriting
+- Execute queries using SQLite read-only mode
+- Enable SQLite `PRAGMA query_only`
+- Limit returned result rows
+- Display generated and authorized SQL separately
+- Provide safe and understandable error messages
+- Include an interactive Streamlit interface
+- Include automated tests using Pytest
+- Separate safe public-demo behavior from full local-provider behavior
 
-## Roles and Permissions
+---
 
-Sales Analyst:
-- Access to customers, orders, order_items, and products
-- No access to the employees table
-- Restricted customer columns
-- No row-level restriction
+## Demo Workflow
 
-Sales Manager:
-- Access to all sales tables
-- Access to the employees table
-- Broad sales access
-- No row-level restriction
+1. Select a business role.
+2. Choose one of the documented demonstration questions.
+3. Allow the demo provider to generate the initial SQL.
+4. Review the generated SQL.
+5. Pass the query through SQLGlot validation.
+6. Apply RBAC and row-level security rules.
+7. Review the final authorized SQL.
+8. Execute the query through the read-only SQLite connection.
+9. Display the authorized result set.
 
-Account Manager:
-- Access only to assigned customers
-- Access only to related orders and order items
-- Products remain available
-- Backend-enforced row-level security
+Example workflow:
 
-Role selection in the demo is not production authentication.
+```text
+Natural-Language Question
+          |
+          v
+Role-Filtered Database Schema
+          |
+          v
+Selected Text-to-SQL Provider
+          |
+          v
+Generated SQL
+          |
+          v
+SQLGlot AST Validation
+          |
+          v
+RBAC and Row-Level Security
+          |
+          v
+Authorized SQL
+          |
+          v
+Read-Only SQLite Execution
+          |
+          v
+Limited Query Results
+```
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    subgraph A["1. User Request"]
+        A1[Business Question]
+        A2[Selected User Role]
+        A3[Provider Selection]
+
+        A1 --> A4[Text-to-SQL Service]
+        A2 --> A4
+        A3 --> A4
+    end
+
+    subgraph B["2. Schema Protection"]
+        B1[SQLite Schema Inspection]
+        B2[Role-Based Schema Filtering]
+        B3[Authorized Schema Prompt]
+
+        B1 --> B2 --> B3
+    end
+
+    subgraph C["3. SQL Generation"]
+        C1[Secure Demo Provider]
+        C2[OpenAI]
+        C3[Gemini]
+        C4[Claude]
+        C5[Ollama]
+        C6[Generated SQL]
+
+        C1 --> C6
+        C2 --> C6
+        C3 --> C6
+        C4 --> C6
+        C5 --> C6
+    end
+
+    subgraph D["4. Security Enforcement"]
+        D1[SQLGlot AST Parsing]
+        D2[Single-Statement Check]
+        D3[SELECT-Only Validation]
+        D4[Table and Column Validation]
+        D5[Row-Level Security Rewrite]
+        D6[Final SQL Re-Validation]
+
+        D1 --> D2 --> D3 --> D4 --> D5 --> D6
+    end
+
+    subgraph E["5. Database Execution"]
+        E1[SQLite mode=ro]
+        E2[PRAGMA query_only]
+        E3[Result Row Limiting]
+        E4[Authorized Results]
+
+        E1 --> E2 --> E3 --> E4
+    end
+
+    A4 --> B1
+    B3 --> C1
+    B3 --> C2
+    B3 --> C3
+    B3 --> C4
+    B3 --> C5
+    C6 --> D1
+    D6 --> E1
+```
+
+---
 
 ## Security Architecture
 
-Defense in depth:
+The project applies defense in depth rather than relying on prompt instructions alone.
 
-1. Role-filtered schema sent to the LLM
-2. Shared prompt restrictions
-3. SQLGlot AST parsing
-4. One-statement policy
-5. SELECT-only policy
-6. Table allowlisting
-7. Column-level validation
-8. Row-level security rewriting
-9. Re-validation after rewriting
-10. SQLite `mode=ro`
-11. `PRAGMA query_only`
-12. Result row limiting
+| Layer | Security Control |
+|---:|---|
+| 1 | Send only the role-filtered schema to the selected provider |
+| 2 | Apply shared Text-to-SQL prompt restrictions |
+| 3 | Parse generated SQL using SQLGlot |
+| 4 | Reject multiple SQL statements |
+| 5 | Permit only `SELECT` queries |
+| 6 | Validate tables against a role-specific allowlist |
+| 7 | Validate requested columns against role permissions |
+| 8 | Apply row-level security rewriting |
+| 9 | Re-validate the rewritten SQL |
+| 10 | Open SQLite using `mode=ro` |
+| 11 | Enable `PRAGMA query_only` |
+| 12 | Limit the maximum number of returned rows |
 
-## Architecture
+The LLM is responsible only for proposing SQL. Final authorization remains within the backend application.
+
+---
+
+## Roles and Permissions
+
+The sample application includes three demonstration roles.
+
+### Sales Analyst
+
+The Sales Analyst can access:
+
+- `customers`
+- `orders`
+- `order_items`
+- `products`
+
+Restrictions:
+
+- No access to the `employees` table
+- Restricted access to selected customer columns
+- No row-level restriction
+
+### Sales Manager
+
+The Sales Manager can access:
+
+- All sales-related tables
+- The `employees` table
+- Broader customer and employee information
+
+Restrictions:
+
+- No row-level restriction
+
+### Account Manager
+
+The Account Manager can access:
+
+- Assigned customers only
+- Orders related to assigned customers
+- Order items related to assigned customers
+- Product information
+
+Restrictions:
+
+- Backend-enforced row-level security
+- No access to customers assigned to other account managers
+
+> The role selector in the demonstration interface is not a production authentication system.
+
+---
+
+## Row-Level Security
+
+Row-level security is enforced inside the backend and is not left to the LLM.
+
+For the Account Manager role, the system modifies authorized queries so that the user can access only:
+
+- Customers assigned to that account manager
+- Orders associated with those customers
+- Order items associated with those orders
+
+The rewritten query is parsed and validated again before execution.
+
+This means that even when the generated SQL does not contain the required ownership filter, the backend applies the restriction before the database query is executed.
+
+---
+
+## Application Modes
+
+The project separates the hosted portfolio demonstration from full local experimentation.
+
+| Mode | External API Keys | Available Providers | Intended Use |
+|---|---|---|---|
+| Public Demo | Not accepted | Secure Demo Provider | Hosted portfolio demonstration |
+| Local Full | Supplied locally by the user | OpenAI, Gemini, Claude, Ollama | Full local experimentation |
+
+---
+
+## Public Demo Mode
+
+Public Demo Mode is designed for safe hosted deployment.
+
+In this mode:
+
+- Visitors are not asked to provide API keys
+- API keys are not accepted or processed
+- No external LLM provider calls are made
+- A deterministic local provider handles the documented example questions
+- Generated SQL still passes through the real security pipeline
+- SQLGlot validation remains active
+- RBAC remains active
+- Row-level security rewriting remains active
+- Read-only SQLite execution remains active
+- Generated SQL and authorized SQL remain visible separately
+
+Public Demo Mode is the default when `APP_MODE` is not configured.
+
+The hosted demonstration supports only the documented questions available in the sidebar.
+
+---
+
+## Local Full Mode
+
+Local Full Mode enables external and local LLM providers.
+
+Supported providers:
+
+- OpenAI
+- Google Gemini
+- Anthropic Claude
+- Ollama
+
+Cloud-provider API keys are entered through a password-style field in the local interface for the current request.
+
+Ollama requires a locally running Ollama server and does not require an API key.
+
+Provider objects are constructed per request rather than being permanently cached.
+
+The current interface does not intentionally write API keys to:
+
+- Project files
+- Application settings
+- The SQLite database
+- Explicit Streamlit session-state storage helpers
+
+This behavior is useful for local experimentation but is not a replacement for production secret-management infrastructure.
+
+---
+
+## Sample Database
+
+The repository includes a SQLite database containing fictional business information.
+
+Tables:
+
+```text
+employees
+customers
+products
+orders
+order_items
+```
+
+The data includes orders from 2024 and 2025 across multiple:
+
+- Regions
+- Order statuses
+- Customers
+- Products
+- Employees
+- Account-manager assignments
+
+The sample database supports demonstrations involving:
+
+- Table joins
+- Aggregations
+- Revenue calculations
+- Rankings
+- Monthly analysis
+- Regional analysis
+- Customer analysis
+- Employee portfolio analysis
+- Role-based filtering
+- Row-level security
+
+---
+
+## Supported Providers
+
+### Secure Demo Provider
+
+The Secure Demo Provider is used in Public Demo Mode.
+
+It generates deterministic SQL for the documented example questions without making external API calls.
+
+### OpenAI
+
+Available in Local Full Mode using a user-supplied API key and model name.
+
+### Google Gemini
+
+Available in Local Full Mode using a user-supplied API key and model name.
+
+### Anthropic Claude
+
+Available in Local Full Mode using a user-supplied Anthropic API key and Claude model name.
+
+### Ollama
+
+Available in Local Full Mode through a locally running Ollama server.
+
+No API key is required.
+
+Model availability and supported model names depend on the selected provider and the user's local or cloud configuration.
+
+---
+
+## Tech Stack
+
+| Category | Technology |
+|---|---|
+| Programming language | Python |
+| User interface | Streamlit |
+| Database | SQLite |
+| SQL parsing and validation | SQLGlot |
+| Data processing | Pandas |
+| Testing | Pytest |
+| OpenAI integration | OpenAI SDK |
+| Gemini integration | Google GenAI SDK |
+| Claude integration | Anthropic SDK |
+| Local model integration | Ollama SDK |
+| Configuration | Environment variables |
+| Database security | Read-only URI mode and `PRAGMA query_only` |
+
+---
+
+## Project Structure
 
 ```text
 Text-to-SQL-with-Guardrails/
 ├── app.py
+│
 ├── assets/
 │   ├── .gitkeep
 │   ├── account-manager-rls.png
 │   ├── sales-analyst-query.png
 │   └── sales-manager-query.png
+│
 ├── data/
 │   ├── .gitkeep
 │   └── company.db
+│
 ├── scripts/
 │   └── create_sample_db.py
+│
 ├── src/
 │   ├── __init__.py
 │   ├── config.py
@@ -91,6 +436,7 @@ Text-to-SQL-with-Guardrails/
 │   ├── rbac.py
 │   ├── schema.py
 │   ├── service.py
+│   │
 │   └── providers/
 │       ├── __init__.py
 │       ├── anthropic_provider.py
@@ -101,6 +447,7 @@ Text-to-SQL-with-Guardrails/
 │       ├── ollama_provider.py
 │       ├── openai_provider.py
 │       └── prompt.py
+│
 ├── tests/
 │   ├── test_config.py
 │   ├── test_database.py
@@ -109,112 +456,73 @@ Text-to-SQL-with-Guardrails/
 │   ├── test_rbac.py
 │   ├── test_sample_database.py
 │   └── test_service.py
+│
 ├── .env.example
 ├── .gitignore
 ├── README.md
 └── requirements.txt
 ```
 
-## Sample Database
-
-The included SQLite database contains fictional business data:
-
-- employees
-- customers
-- products
-- orders
-- order_items
-
-Orders cover 2024 and 2025 with multiple regions and order statuses. The dataset is suitable for joins, aggregation, rankings, date analysis, and role-based filtering demonstrations.
-
-## Supported Providers
-
-- Secure Demo Provider in Public Demo Mode
-- OpenAI
-- Gemini
-- Claude via Anthropic
-- Ollama locally
-
-OpenAI, Gemini, Claude, and Ollama are available in Local Full Mode. Cloud providers require the user's own API key, entered in the local UI for the current request. Ollama requires a local Ollama server and no API key.
-
-Provider objects are constructed per request and are not cached. The application does not write API keys to project files, settings, databases, or explicit Streamlit session-state helpers. This UI behavior is not a substitute for production secret management.
-
-Example model names vary by provider and availability. Enter the model name you intend to use in the UI.
-
-## Hosted Demo Security
-
-The hosted Streamlit application runs in Public Demo Mode. It does not request, accept, or process visitors' API keys and makes no external provider calls. Instead, it uses a deterministic local provider for the documented example questions.
-
-The demo is not a simulated security result: generated SQL still passes through the real SQLGlot guardrails, RBAC enforcement, row-level security rewriting, and read-only SQLite execution. Generated SQL and authorized SQL remain visible separately.
-
-Full OpenAI, Gemini, Claude, and Ollama support remains available in Local Full Mode. Cloud providers require the user's own API key when running locally; Ollama works locally without an API key. Public Demo Mode intentionally supports only the documented sidebar questions.
-
-| Mode | External API Keys | Providers | Intended Use |
-| --- | --- | --- | --- |
-| Public Demo | Not accepted | Secure Demo Provider | Hosted portfolio demo |
-| Local Full | User supplied locally | OpenAI, Gemini, Claude, Ollama | Full local experimentation |
-
-### Streamlit deployment
-
-The public Streamlit deployment should use:
-
-```toml
-APP_MODE = "public_demo"
-```
-
-It should not configure `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`. Because `public_demo` is the safe default, no Streamlit secret is required when no other configuration is needed.
-
-## Extensibility and Real-World Use
-
-> The project currently supports SQLite, while its modular architecture is designed to be extended to PostgreSQL, MySQL, SQL Server, and other relational databases through database-specific adapters.
-
-The current implementation is fully functional with SQLite. The application architecture separates LLM providers, schema inspection, SQL validation, RBAC enforcement, database execution, and the Streamlit UI, which makes the project suitable as a foundation for other relational databases.
-
-Supporting PostgreSQL, MySQL, SQL Server, or another database would require a database-specific adapter, the matching SQLGlot dialect, database-specific schema inspection, a read-only database user, and adapted row-level security and query execution where needed. Other databases are not supported out of the box in this repository.
-
-In practical business use, authorized employees can ask questions about structured company data without writing SQL. This can reduce repeated manual reporting requests and help sales, operations, finance, and management teams explore approved data more quickly. Guardrails and RBAC provide a safer alternative to executing unrestricted LLM-generated SQL, and the same architecture could be integrated with an internal analytics platform or company database after adapting the database layer and production security controls.
+---
 
 ## Installation
 
-PowerShell:
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Azoqoz/Text-to-SQL-with-Guardrails.git
+cd Text-to-SQL-with-Guardrails
+```
+
+### 2. Create a virtual environment
+
+#### Windows
 
 ```powershell
 py -m venv .venv
 .venv\Scripts\activate
-py -m pip install -r requirements.txt
-py scripts/create_sample_db.py
-$env:APP_MODE = "local_full"
-py -m streamlit run app.py
 ```
 
-macOS/Linux:
+#### macOS / Linux
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-python scripts/create_sample_db.py
-export APP_MODE=local_full
-python -m streamlit run app.py
 ```
 
-For safe public demo behavior, use `APP_MODE=public_demo` or omit `APP_MODE` entirely. For the full local provider UI, use `APP_MODE=local_full`.
+### 3. Install the dependencies
 
-PowerShell launch commands:
+#### Windows
 
 ```powershell
-# Public demo (also the default when APP_MODE is absent)
-$env:APP_MODE = "public_demo"
-py -m streamlit run app.py
-
-# Full local providers
-$env:APP_MODE = "local_full"
-py -m streamlit run app.py
+py -m pip install -r requirements.txt
 ```
+
+#### macOS / Linux
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+### 4. Create the sample database
+
+#### Windows
+
+```powershell
+py scripts/create_sample_db.py
+```
+
+#### macOS / Linux
+
+```bash
+python3 scripts/create_sample_db.py
+```
+
+---
 
 ## Environment Configuration
 
-`.env.example`:
+Copy `.env.example` to `.env` and adjust the settings when needed.
 
 ```env
 APP_MODE=local_full
@@ -234,46 +542,203 @@ OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=
 ```
 
-`APP_MODE` accepts `public_demo` and `local_full` case-insensitively and defaults to `public_demo`. API keys are deliberately not part of `AppSettings`; in Local Full Mode, cloud-provider keys are entered through the password-style UI field for the current request.
+### Available application modes
+
+```text
+public_demo
+local_full
+```
+
+`APP_MODE` is case-insensitive and defaults to:
+
+```text
+public_demo
+```
+
+### Main settings
+
+| Setting | Purpose |
+|---|---|
+| `APP_MODE` | Selects safe public-demo behavior or full local-provider behavior |
+| `DATABASE_PATH` | Defines the SQLite database location |
+| `MAX_RESULT_ROWS` | Limits the maximum number of query results |
+| `LLM_PROVIDER` | Defines the default local provider |
+| `OPENAI_MODEL` | Defines the OpenAI model name |
+| `GEMINI_MODEL` | Defines the Gemini model name |
+| `ANTHROPIC_MODEL` | Defines the Claude model name |
+| `OLLAMA_HOST` | Defines the local Ollama server address |
+| `OLLAMA_MODEL` | Defines the local Ollama model name |
+
+API keys are intentionally not defined inside `AppSettings`.
+
+In Local Full Mode, cloud-provider keys are entered through the Streamlit interface for the current request.
+
+---
+
+## Running the Application
+
+### Public Demo Mode
+
+Public Demo Mode is also used when `APP_MODE` is absent.
+
+#### Windows PowerShell
+
+```powershell
+$env:APP_MODE = "public_demo"
+py -m streamlit run app.py
+```
+
+#### macOS / Linux
+
+```bash
+export APP_MODE=public_demo
+python3 -m streamlit run app.py
+```
+
+### Local Full Mode
+
+#### Windows PowerShell
+
+```powershell
+$env:APP_MODE = "local_full"
+py -m streamlit run app.py
+```
+
+#### macOS / Linux
+
+```bash
+export APP_MODE=local_full
+python3 -m streamlit run app.py
+```
+
+Streamlit will display a local URL in the terminal, typically:
+
+```text
+http://localhost:8501
+```
+
+Open the displayed URL in your browser.
+
+---
 
 ## Example Questions
 
-Sales Analyst:
-- What are the top 5 products by total completed-order revenue?
-- Show monthly completed-order revenue for 2025.
-- Which regions have the highest number of completed orders?
-- Which customers placed the most completed orders?
+### Sales Analyst
 
-Sales Manager:
-- Which employees manage the highest-revenue customer portfolios?
-- Show customer count by account manager.
-- Compare completed-order revenue by region.
-- Which products generate the most revenue?
+```text
+What are the top 5 products by total completed-order revenue?
 
-Account Manager:
-- Show my assigned customers.
-- Which of my customers generated the most revenue?
-- Show completed orders for my customers.
-- What products were purchased most by my customers?
+Show monthly completed-order revenue for 2025.
+
+Which regions have the highest number of completed orders?
+
+Which customers placed the most completed orders?
+```
+
+### Sales Manager
+
+```text
+Which employees manage the highest-revenue customer portfolios?
+
+Show customer count by account manager.
+
+Compare completed-order revenue by region.
+
+Which products generate the most revenue?
+```
+
+### Account Manager
+
+```text
+Show my assigned customers.
+
+Which of my customers generated the most revenue?
+
+Show completed orders for my customers.
+
+What products were purchased most by my customers?
+```
+
+---
 
 ## Testing
 
-Standard command:
+Run the complete automated test suite with:
+
+### Windows
 
 ```powershell
 py -m pytest
 ```
 
-Windows temp-folder workaround used on this machine:
+### macOS / Linux
+
+```bash
+python3 -m pytest
+```
+
+The test suite covers:
+
+- Application configuration
+- SQLite database access
+- Read-only database execution
+- SQL guardrail validation
+- Provider behavior
+- Role-based access control
+- Row-level security
+- Sample database integrity
+- End-to-end service behavior
+
+### Windows temporary-folder workaround
+
+The following command can be used when local Windows permissions prevent Pytest from creating temporary files:
 
 ```powershell
 $root = "D:\pytest_aziz"
 New-Item -ItemType Directory -Path $root -Force | Out-Null
-$run = Join-Path $root ("run_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+
+$run = Join-Path $root (
+    "run_" + (Get-Date -Format "yyyyMMdd_HHmmss")
+)
+
 py -m pytest --basetemp="$run"
 ```
 
-The external temp folder is only a workaround for local Windows permission issues.
+This external temporary folder is only a workaround for local Windows permission issues.
+
+---
+
+## Deployment
+
+The application can be deployed using Streamlit Community Cloud in Public Demo Mode.
+
+Recommended configuration:
+
+```text
+Repository: Azoqoz/Text-to-SQL-with-Guardrails
+Branch: main
+Main file path: app.py
+```
+
+Add the following Streamlit secret:
+
+```toml
+APP_MODE = "public_demo"
+```
+
+Because `public_demo` is the safe default, no Streamlit secret is required when no other configuration is needed.
+
+The hosted deployment should not configure:
+
+```text
+OPENAI_API_KEY
+GEMINI_API_KEY
+ANTHROPIC_API_KEY
+```
+
+Public Demo Mode does not request visitor API keys and does not call external providers.
+
+---
 
 ## Screenshots
 
@@ -289,36 +754,119 @@ The external temp folder is only a workaround for local Windows permission issue
 
 ![Sales Manager query with broader employee and sales access](assets/sales-manager-query.png)
 
-## Limitations
+---
 
-- LLM SQL may be safe but logically incorrect
-- Demo role selector is not authentication
-- SQLite-focused implementation; other databases are not supported out of the box
-- No production identity provider
-- No query cost estimator
-- No sensitive-data masking beyond configured permissions
-- API availability and model names vary by provider
+## Extensibility and Real-World Use
+
+The current implementation supports SQLite.
+
+Its modular architecture separates:
+
+- Provider integration
+- Prompt generation
+- Schema inspection
+- SQL parsing
+- SQL validation
+- Role-based access control
+- Row-level security
+- Database execution
+- User-interface logic
+
+This structure can serve as a foundation for adding other relational databases.
+
+Potential targets include:
+
+- PostgreSQL
+- MySQL
+- Microsoft SQL Server
+
+Supporting another database would require:
+
+- A database-specific adapter
+- The corresponding SQLGlot dialect
+- Database-specific schema inspection
+- A least-privilege read-only database user
+- Adapted query execution
+- Adapted row-level security rules
+- Database-specific security testing
+
+Other databases are not supported out of the box in the current repository.
+
+In a real internal analytics environment, this architecture could help authorized employees explore approved company data without writing SQL, while keeping query authorization and database execution under backend control.
+
+---
+
+## Current Limitations
+
+- Generated SQL may be syntactically safe but logically incorrect
+- The demonstration role selector is not authentication
+- The current database implementation supports SQLite only
+- Other relational databases are not supported out of the box
+- The application does not include a production identity provider
+- The application does not include a query-cost estimator
+- Sensitive-data masking is limited to configured column permissions
+- Provider availability and model names may change
 - Public Demo Mode supports only the documented example questions
-- Production integration requires database-specific testing, authentication, secrets management, auditing, least-privilege credentials, rate limiting, and stronger authorization integration
+- The system does not measure execution accuracy against a formal evaluation dataset
+- Production deployment would require stronger identity and authorization integration
+- Production deployment would require dedicated secret management
+- Production deployment would require auditing and monitoring
+- Production deployment would require rate limiting and least-privilege credentials
+
+---
 
 ## Future Improvements
 
-- Real authentication
-- Identity-provider integration
-- Policy storage in a database
-- Audit logs
-- Query timeout and complexity limits
-- Sensitive-column masking
-- Evaluation dataset and execution accuracy metrics
-- PostgreSQL support
-- FastAPI backend
-- Deployment
+- Add production authentication
+- Add identity-provider integration
+- Store authorization policies in a database
+- Add persistent audit logs
+- Add query timeouts
+- Add SQL complexity limits
+- Add query-cost estimation
+- Add sensitive-column masking
+- Add an evaluation dataset
+- Measure SQL execution accuracy
+- Add PostgreSQL support
+- Add MySQL and SQL Server adapters
+- Add a FastAPI backend
+- Add production secret management
+- Add rate limiting
+- Add Docker support
+- Add continuous integration
+- Add automated deployment
 
-## Tech Stack
+---
 
-Python, Streamlit, SQLite, SQLGlot, Pandas, Pytest, OpenAI SDK, Google GenAI SDK, Anthropic SDK, Ollama SDK
+## Why This Project Matters
 
-## Project Status
+This project demonstrates that Text-to-SQL systems require more than prompt engineering.
 
-The application includes a safe hosted demo mode and a separate local full-provider mode. Public Demo Mode exercises the complete backend security pipeline without collecting visitor API keys or calling external providers.
+A production-oriented system must treat LLM-generated SQL as untrusted input and validate it before database execution.
 
+The project demonstrates practical AI Engineering and backend-security skills, including:
+
+- Natural-language-to-SQL generation
+- Multi-provider LLM integration
+- Prompt and schema filtering
+- Abstract Syntax Tree parsing
+- SQL validation
+- Role-based access control
+- Column-level authorization
+- Row-level security
+- Query rewriting
+- Read-only database execution
+- Safe public-demo design
+- Provider isolation
+- Secure error handling
+- Automated testing
+- Streamlit application development
+- Modular software architecture
+
+The project shows how an LLM can be integrated with structured company data while keeping security and authorization decisions outside the model.
+
+---
+
+## Author
+
+Developed by [Azoqoz](https://github.com/Azoqoz).
