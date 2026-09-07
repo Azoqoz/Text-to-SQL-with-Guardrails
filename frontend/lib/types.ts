@@ -15,6 +15,7 @@ export interface RoleCapability {
   role: Role;
   requires_employee_id: boolean;
   example_questions: string[];
+  guardrail_test_questions?: string[];
 }
 export interface Capabilities {
   app_mode: Mode;

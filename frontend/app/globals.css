@@ -106,6 +106,7 @@ kbd { font-size: 10px; color: #bac6ca; border: 1px solid #405056; padding: 1px 4
 .request-library button[aria-pressed="true"] { color: #acc7ff; }
 .request-library button[aria-pressed="true"] .example-index { color: #acc7ff; }
 .request-library button:not(:disabled):hover { color: #b4ceff; }
+.guardrail-test-label { display: block; margin-top: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: .025em; color: #a8b6b9; }
 .example-index { font-family: var(--mono); font-size: 10px; color: #8fa7af; padding-top: 3px; }
 .request-library button > span:last-child { color: #7e9eaa; }
 .library-empty { min-height: 150px; display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 14px; }

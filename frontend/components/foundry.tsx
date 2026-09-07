@@ -189,7 +189,7 @@ export function Foundry() {
             <p>{freeText ? "A starting point for your next query." : "Available for the selected access role."}</p>
             {scopeLoading ? <div className="library-empty"><span className="spinner" /> Loading supported requests…</div>
               : examples.length ? <ol>{examples.map((example, i) => <li key={example}><button type="button" disabled={busy || !ready} aria-pressed={question === example}
-                onClick={() => { setQuestion(example); setQueryIssue(null); }}><span className="example-index">{String(i + 1).padStart(2, "0")}</span><span>{example}</span><span aria-hidden>↗</span></button></li>)}</ol>
+                onClick={() => { setQuestion(example); setQueryIssue(null); }}><span className="example-index">{String(i + 1).padStart(2, "0")}</span><span>{example}{capabilities?.app_mode === "public_demo" && selectedRole?.guardrail_test_questions?.includes(example) && <small className="guardrail-test-label">Guardrail test</small>}</span><span aria-hidden>↗</span></button></li>)}</ol>
               : <div className="library-empty">{capabilities ? "No example requests supplied." : "Requests will load when the API is connected."}</div>}
           </aside></div>
         </form>

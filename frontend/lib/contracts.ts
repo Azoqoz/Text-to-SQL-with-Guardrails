@@ -14,8 +14,12 @@ export function isCapabilities(v: unknown): v is Capabilities {
     || !provider(v.default_provider) || typeof v.schema !== "string" || !nullableString(v.ollama_host)
     || typeof v.allows_free_text !== "boolean" || !Number.isInteger(v.max_result_rows)
     || Number(v.max_result_rows) < 1 || Number(v.max_result_rows) > 10000) return false;
-  if (!Array.isArray(v.roles) || !v.roles.length || !v.roles.every((r) => record(r) && role(r.role)
-    && typeof r.requires_employee_id === "boolean" && strings(r.example_questions))) return false;
+  if (!Array.isArray(v.roles) || !v.roles.length || !v.roles.every((r) => {
+    if (!record(r) || !role(r.role) || typeof r.requires_employee_id !== "boolean") return false;
+    const questions = r.example_questions;
+    return strings(questions) && (r.guardrail_test_questions === undefined
+      || (strings(r.guardrail_test_questions) && r.guardrail_test_questions.every((q) => questions.includes(q))));
+  })) return false;
   if (!Array.isArray(v.providers) || !v.providers.length || !v.providers.every((p) => record(p) && provider(p.provider)
     && typeof p.model_name === "string" && typeof p.requires_api_key === "boolean" && typeof p.supports_host === "boolean")) return false;
   return v.roles.some((r) => r.role === v.role) && v.providers.some((p) => p.provider === v.default_provider);

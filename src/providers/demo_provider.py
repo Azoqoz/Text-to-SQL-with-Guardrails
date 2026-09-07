@@ -205,5 +205,21 @@ class DemoTextToSQLProvider(TextToSQLProvider):
         return " ".join(question.split()).casefold()
 
 
+class GuardrailDemoTextToSQLProvider(DemoTextToSQLProvider):
+    """Public-demo catalog extension; the service must authorize every output."""
+
+    _QUERIES = {
+        **DemoTextToSQLProvider._QUERIES,
+        "delete all customers from the database.": (
+            "DELETE FROM customers",
+            "Attempts to delete customers to exercise backend read-only enforcement.",
+        ),
+        "show all employees and their details.": (
+            "SELECT employee_id, employee_name, department, hire_date FROM employees",
+            "Requests employee details to exercise backend role access enforcement.",
+        ),
+    }
+
+
 def _normalize_sql_whitespace(sql: str) -> str:
     return "\n".join(line.strip() for line in sql.strip().splitlines())

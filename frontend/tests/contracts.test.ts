@@ -34,6 +34,40 @@ test("valid authorized, empty, and blocked responses are accepted", () => {
   assert.ok(isQueryResponse(authorized)); assert.ok(isQueryResponse(blocked));
   assert.ok(isQueryResponse({ ...authorized, rows: [], row_count: 0 }));
 });
+
+test("guardrail library labels are optional backend metadata within the request catalog", () => {
+  const question = "Delete all customers from the database.";
+  const entry = { ...capabilities.roles[0], example_questions: [question], guardrail_test_questions: [question] };
+  assert.ok(isCapabilities({ ...capabilities, roles: [entry] }));
+  assert.ok(!isCapabilities({ ...capabilities, roles: [{ ...entry, guardrail_test_questions: "invalid" }] }));
+  assert.ok(!isCapabilities({ ...capabilities, roles: [{ ...entry, guardrail_test_questions: ["Missing request"] }] }));
+});
+
+test("curated demo requests are submitted and display only the backend security decision", async () => {
+  const previousFetch = globalThis.fetch; const previousEnv = process.env.NEXT_PUBLIC_API_BASE_URL;
+  process.env.NEXT_PUBLIC_API_BASE_URL = "http://backend.test";
+  try {
+    for (const [question, error_type] of [
+      ["Delete all customers from the database.", "unsafe_sql"],
+      ["Show all employees and their details.", "access_denied"],
+    ]) {
+      const body = { question, user_id: "visitor", role: "sales_analyst" as const };
+      const backendResponse = { ...blocked, question, error_type };
+      let calls = 0;
+      globalThis.fetch = async (url, options) => {
+        calls++;
+        assert.equal(String(url), "/api/query");
+        assert.deepEqual(JSON.parse(String(options?.body)), body);
+        return Response.json(backendResponse);
+      };
+      const response = await runQuery(body, new AbortController().signal);
+      assert.equal(calls, 1);
+      assert.deepEqual(response, backendResponse);
+      assert.equal(queryDecision(response).title, "BLOCKED");
+      assert.equal(queryDecision({ ...authorized, question }).title, "AUTHORIZED");
+    }
+  } finally { globalThis.fetch = previousFetch; if (previousEnv === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL; else process.env.NEXT_PUBLIC_API_BASE_URL = previousEnv; }
+});
 test("malformed and failed responses with rows never become displayable results", () => {
   for (const value of [null, {}, { ...authorized, success: "true" }, { ...authorized, row_count: 2 },
     { ...authorized, authorized_sql: "" }, { ...authorized, error_type: "unsafe_sql" },

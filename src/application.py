@@ -15,7 +15,7 @@ from src.config import AppSettings, ApplicationMode
 from src.database import SQLiteReadOnlyDatabase
 from src.models import TextToSQLRequest, TextToSQLResponse
 from src.providers.base import TextToSQLProvider
-from src.providers.demo_provider import DemoTextToSQLProvider
+from src.providers.demo_provider import DemoTextToSQLProvider, GuardrailDemoTextToSQLProvider
 from src.providers.factory import ProviderType, create_provider
 from src.providers.models import LLMConfigurationError, LLMProviderError
 from src.rbac import UserContext, UserRole
@@ -40,6 +40,19 @@ EXAMPLE_QUESTIONS = {
         "Which of my customers generated the most revenue?",
         "Show completed orders for my customers.",
         "What products were purchased most by my customers?",
+    ),
+}
+# Only the public-demo application exposes these additional requests. The sales
+# manager can access every sample table, so has no restricted-table example.
+DEMO_GUARDRAIL_QUESTIONS = {
+    UserRole.SALES_ANALYST: (
+        "Delete all customers from the database.",
+        "Show all employees and their details.",
+    ),
+    UserRole.SALES_MANAGER: ("Delete all customers from the database.",),
+    UserRole.ACCOUNT_MANAGER: (
+        "Delete all customers from the database.",
+        "Show all employees and their details.",
     ),
 }
 LOCAL_PROVIDERS = (
@@ -68,6 +81,7 @@ class RoleCapability:
     role: UserRole
     requires_employee_id: bool
     example_questions: tuple[str, ...]
+    guardrail_test_questions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,7 +153,11 @@ class TextToSQLApplication:
                 for provider in providers
             ],
             roles=[
-                RoleCapability(role, role == UserRole.ACCOUNT_MANAGER, EXAMPLE_QUESTIONS[role])
+                RoleCapability(
+                    role, role == UserRole.ACCOUNT_MANAGER,
+                    EXAMPLE_QUESTIONS[role] + (DEMO_GUARDRAIL_QUESTIONS[role] if demo else ()),
+                    DEMO_GUARDRAIL_QUESTIONS[role] if demo else (),
+                )
                 for role in UserRole
             ],
             role=user.role,
@@ -161,9 +179,9 @@ class TextToSQLApplication:
         try:
             request = TextToSQLRequest(question, user)
             if self.settings.is_public_demo:
-                if question not in EXAMPLE_QUESTIONS[user.role]:
+                if question not in EXAMPLE_QUESTIONS[user.role] + DEMO_GUARDRAIL_QUESTIONS[user.role]:
                     raise ValueError("Question is not in the role's demo catalog")
-                provider = DemoTextToSQLProvider()
+                provider = GuardrailDemoTextToSQLProvider()
                 model_name = provider.model_name
             else:
                 provider_type = ProviderType(provider_type)
