@@ -1,20 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError, getCapabilities, getHealth, runQuery } from "@/lib/api";
+import { ApiError, runQuery } from "@/lib/api";
+import { loadReadyCapabilities } from "@/lib/readiness";
 import { providerLabel, roleLabel, type Capabilities, type Provider, type QueryRequest, type QueryResponse, type Role } from "@/lib/types";
 import { AccessManifest } from "./access-manifest";
 import { GovernanceTrack } from "./governance-track";
 import { ResultDeck } from "./result-deck";
 import { SqlInspection } from "./sql-inspection";
 
-type Connection = "checking" | "online" | "offline";
+type Connection = "waking" | "online" | "offline";
 const issueFrom = (error: unknown) => error instanceof ApiError ? error : new ApiError("server", "The request could not be completed. Please reconnect and try again.");
 
 export function Foundry() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [scopeLoading, setScopeLoading] = useState(true);
-  const [connection, setConnection] = useState<Connection>("checking");
+  const [connection, setConnection] = useState<Connection>("waking");
   const [scopeIssue, setScopeIssue] = useState<ApiError | null>(null);
   const [queryIssue, setQueryIssue] = useState<ApiError | null>(null);
   const [role, setRole] = useState<Role | undefined>();
@@ -39,13 +40,14 @@ export function Foundry() {
     const controller = new AbortController(); scopeRequest.current = controller;
     requestedEmployee.current = employeeId;
     const requestId = ++sequence.current;
-    const [health, scope] = await Promise.allSettled([
-      getHealth(controller.signal), getCapabilities(controller.signal, selectedRole, employeeId),
-    ]);
-    if (controller.signal.aborted || requestId !== sequence.current) return;
-    setConnection(health.status === "fulfilled" ? "online" : "offline");
-    if (scope.status === "fulfilled") {
-      const data = scope.value;
+    let healthy = false;
+    try {
+      const data = await loadReadyCapabilities(controller.signal, selectedRole, employeeId, () => {
+        if (controller.signal.aborted || requestId !== sequence.current) return;
+        healthy = true;
+        setConnection("online");
+      });
+      if (controller.signal.aborted || requestId !== sequence.current) return;
       if (selectedRole && data.role !== selectedRole) {
         setScopeIssue(new ApiError("malformed", "The returned scope does not match the selected role. Reconnect to reload it."));
         setCapabilities(null);
@@ -55,9 +57,13 @@ export function Foundry() {
         setHost(data.ollama_host ?? "");
         setQuestion((current) => data.allows_free_text || data.roles.find((r) => r.role === data.role)?.example_questions.includes(current) ? current : "");
       }
-    } else { setScopeIssue(issueFrom(scope.reason)); setCapabilities(null); }
-    if (health.status === "rejected" && scope.status === "fulfilled") setScopeIssue(issueFrom(health.reason));
-    setScopeLoading(false);
+    } catch (error) {
+      if (controller.signal.aborted || requestId !== sequence.current) return;
+      if (!healthy) setConnection("offline");
+      setScopeIssue(issueFrom(error)); setCapabilities(null);
+    } finally {
+      if (!controller.signal.aborted && requestId === sequence.current) setScopeLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -66,7 +72,7 @@ export function Foundry() {
   }, [refresh]);
 
   function beginRefresh(selectedRole?: Role, employeeId?: number) {
-    setScopeLoading(true); setConnection("checking"); setScopeIssue(null); setQueryIssue(null); setResult(null); setApiKey("");
+    setScopeLoading(true); setConnection("waking"); setScopeIssue(null); setQueryIssue(null); setResult(null); setApiKey("");
     void refresh(selectedRole, employeeId);
   }
 
@@ -132,7 +138,8 @@ export function Foundry() {
   const activeIssue = queryIssue ?? scopeIssue;
   const issueTitle = activeIssue ? ({ offline: "API OFFLINE", malformed: "MALFORMED RESPONSE", validation: "VALIDATION ERROR",
     server: "API ERROR", configuration: "CONNECTION NOT CONFIGURED", timeout: "CONNECTION TIMED OUT" })[activeIssue.kind] : "";
-  const hint = scopeLoading ? "Loading capabilities and access scope…" : !capabilities ? "Connect to the API to load requests and access scope."
+  const hint = connection === "waking" ? "The free demo service may take up to a minute to start."
+    : scopeLoading ? "Loading capabilities and access scope…" : !capabilities ? "Connect to the API to load requests and access scope."
     : connection !== "online" ? "Reconnect to the API before running another request."
     : scopePending ? "Apply a valid employee ID to refresh the access scope." : !question ? freeText ? "Enter a request or choose an example." : "Choose a request from the library."
     : keyRequired && !apiKey ? "Enter a provider key for this request. It will be cleared on submission."
@@ -146,7 +153,7 @@ export function Foundry() {
       <div className="rail-context"><span>ENVIRONMENT <strong>{capabilities ? local ? "Local / Full" : "Public / Demo" : "Unresolved"}</strong></span>
         <span>ROLE <strong>{role ? roleLabel(role) : "Pending scope"}</strong></span>
         <span>PROVIDER <strong>{provider ? providerLabel(provider) : "Unresolved"}</strong></span></div>
-      <div className={`connectivity ${connection}`} role="status"><i aria-hidden />API {connection === "checking" ? "connecting" : connection}</div>
+      <div className={`connectivity ${connection}`} role="status"><i aria-hidden />{connection === "waking" ? "Waking API…" : `API ${connection}`}</div>
     </header>
     <main className="foundry-shell">
       <div className="workspace-heading"><div><span className="eyebrow">CONTROLLED DATABASE ACCESS</span><h1>Request. Inspect. Authorize.</h1></div>
