@@ -1,104 +1,137 @@
 # Text-to-SQL with Guardrails
 
-A secure multi-provider Text-to-SQL application that converts natural-language business questions into authorized SQLite queries using AST-based validation, role-based access control, row-level security, and read-only database execution.
+A full-stack Text-to-SQL application that converts natural-language business questions into authorized SQLite queries using Next.js, FastAPI, SQLGlot AST validation, role-based access control, row-level security, and read-only database execution.
 
 ![Python](https://img.shields.io/badge/Language-Python-blue)
-![Streamlit](https://img.shields.io/badge/Framework-Streamlit-red)
+![TypeScript](https://img.shields.io/badge/Language-TypeScript-3178C6)
+![Next.js](https://img.shields.io/badge/Frontend-Next.js-black)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
 ![SQLite](https://img.shields.io/badge/Database-SQLite-lightblue)
 ![SQLGlot](https://img.shields.io/badge/SQL%20Validation-SQLGlot-purple)
-![Security](https://img.shields.io/badge/Security-RBAC%20%2B%20Guardrails-green)
-![Tests](https://img.shields.io/badge/Testing-Pytest-orange)
+![Security](https://img.shields.io/badge/Security-RBAC%20%2B%20RLS-green)
+![Testing](https://img.shields.io/badge/Testing-Pytest-orange)
+
+---
+
+## Live Application
+
+**Web Application:**  
+https://text-to-sql-with-guardrails.vercel.app/
+
+> The hosted application runs in a restricted Public Demo Mode designed to demonstrate the real SQL security pipeline without requiring visitor API keys.
 
 ---
 
 ## Overview
 
-Text-to-SQL with Guardrails is a secure natural-language analytics application designed for authorized employees who need to explore structured business data without writing SQL manually.
+Text-to-SQL with Guardrails is a secure natural-language analytics application designed for authorized users who need to explore structured business data without writing SQL manually.
 
-The application converts a user question into SQL using a selected LLM provider. Generated SQL is never executed directly.
+A user asks a business question in natural language.
 
-Before database execution, the system:
+The application generates SQL, but generated SQL is never trusted or executed directly.
 
+Before database execution, the backend:
+
+- Inspects the database schema
+- Filters schema information according to the selected role
+- Generates candidate SQL
 - Parses the query using SQLGlot
 - Enforces a single-statement policy
-- Allows only `SELECT` operations
-- Validates requested tables and columns
+- Permits only `SELECT` queries
+- Validates requested tables
+- Validates requested columns
 - Applies role-based access control
-- Injects row-level security restrictions when required
-- Re-validates the rewritten SQL
-- Executes the authorized query through a read-only SQLite connection
-- Limits the number of returned rows
+- Injects row-level security when required
+- Re-validates the rewritten query
+- Opens SQLite in read-only mode
+- Enables `PRAGMA query_only`
+- Limits the maximum returned rows
+- Executes only the final authorized SQL
 
-The generated SQL and the final authorized SQL remain visible separately, making the security process transparent to the user.
+The generated SQL and the final authorized SQL remain visible separately, making the security process inspectable instead of hiding authorization behind the model.
 
 ---
 
 ## Key Features
 
-- Convert natural-language questions into SQL
-- Support OpenAI, Gemini, Claude, and Ollama
-- Provide a secure local demo provider for hosted demonstrations
-- Inspect the SQLite database schema automatically
-- Expose only role-authorized schema information to the LLM
-- Parse generated SQL into an Abstract Syntax Tree
-- Enforce a one-statement policy
-- Allow only read-only `SELECT` queries
-- Block unauthorized tables
-- Block unauthorized columns
-- Apply backend-enforced row-level security
-- Re-validate SQL after security rewriting
-- Execute queries using SQLite read-only mode
-- Enable SQLite `PRAGMA query_only`
-- Limit returned result rows
-- Display generated and authorized SQL separately
-- Provide safe and understandable error messages
-- Include an interactive Streamlit interface
-- Include automated tests using Pytest
-- Separate safe public-demo behavior from full local-provider behavior
+- Natural-language-to-SQL generation
+- Modern Next.js production frontend
+- FastAPI service layer
+- Multi-provider LLM support
+- OpenAI integration
+- Google Gemini integration
+- Anthropic Claude integration
+- Local Ollama support
+- Deterministic Secure Demo Provider
+- Automatic SQLite schema inspection
+- Role-filtered schema exposure
+- SQLGlot AST parsing
+- Single-statement enforcement
+- `SELECT`-only execution
+- Table-level authorization
+- Column-level authorization
+- Role-based access control
+- Backend-enforced row-level security
+- SQL security rewriting
+- Post-rewrite validation
+- SQLite read-only connection mode
+- `PRAGMA query_only`
+- Maximum-result-row limits
+- Generated-vs-authorized SQL comparison
+- Safe error handling
+- Public Demo Mode
+- Local Full Mode
+- Automated Pytest coverage
+- Vercel frontend deployment
+- Legacy Streamlit interface retained for project history
 
 ---
 
-## Demo Workflow
-
-1. Select a business role.
-2. Choose one of the documented demonstration questions.
-3. Allow the demo provider to generate the initial SQL.
-4. Review the generated SQL.
-5. Pass the query through SQLGlot validation.
-6. Apply RBAC and row-level security rules.
-7. Review the final authorized SQL.
-8. Execute the query through the read-only SQLite connection.
-9. Display the authorized result set.
-
-Example workflow:
+## Query Workflow
 
 ```text
 Natural-Language Question
           |
           v
+Selected Business Role
+          |
+          v
 Role-Filtered Database Schema
           |
           v
-Selected Text-to-SQL Provider
+Text-to-SQL Provider
           |
           v
 Generated SQL
           |
           v
-SQLGlot AST Validation
+SQLGlot AST Parsing
           |
           v
-RBAC and Row-Level Security
+Single-Statement Validation
           |
           v
-Authorized SQL
+SELECT-Only Validation
+          |
+          v
+Table / Column Authorization
+          |
+          v
+Row-Level Security Rewrite
+          |
+          v
+Final SQL Re-Validation
           |
           v
 Read-Only SQLite Execution
           |
           v
-Limited Query Results
+Limited Authorized Results
 ```
+
+The language model proposes SQL.
+
+The backend decides whether that SQL is allowed to execute.
 
 ---
 
@@ -106,67 +139,42 @@ Limited Query Results
 
 ```mermaid
 flowchart TD
-    subgraph A["1. User Request"]
-        A1[Business Question]
-        A2[Selected User Role]
-        A3[Provider Selection]
+    A["User Question"] --> B["Next.js Frontend"]
+    B --> C["FastAPI Service"]
 
-        A1 --> A4[Text-to-SQL Service]
-        A2 --> A4
-        A3 --> A4
-    end
+    C --> D["Role Selection"]
 
-    subgraph B["2. Schema Protection"]
-        B1[SQLite Schema Inspection]
-        B2[Role-Based Schema Filtering]
-        B3[Authorized Schema Prompt]
+    D --> E["SQLite Schema Inspection"]
+    E --> F["Role-Filtered Schema"]
 
-        B1 --> B2 --> B3
-    end
+    F --> G["Text-to-SQL Provider"]
 
-    subgraph C["3. SQL Generation"]
-        C1[Secure Demo Provider]
-        C2[OpenAI]
-        C3[Gemini]
-        C4[Claude]
-        C5[Ollama]
-        C6[Generated SQL]
+    G --> G1["Secure Demo Provider"]
+    G --> G2["OpenAI"]
+    G --> G3["Gemini"]
+    G --> G4["Claude"]
+    G --> G5["Ollama"]
 
-        C1 --> C6
-        C2 --> C6
-        C3 --> C6
-        C4 --> C6
-        C5 --> C6
-    end
+    G1 --> H["Generated SQL"]
+    G2 --> H
+    G3 --> H
+    G4 --> H
+    G5 --> H
 
-    subgraph D["4. Security Enforcement"]
-        D1[SQLGlot AST Parsing]
-        D2[Single-Statement Check]
-        D3[SELECT-Only Validation]
-        D4[Table and Column Validation]
-        D5[Row-Level Security Rewrite]
-        D6[Final SQL Re-Validation]
+    H --> I["SQLGlot AST Validation"]
+    I --> J["Single-Statement Check"]
+    J --> K["SELECT-Only Check"]
+    K --> L["Table / Column Authorization"]
+    L --> M["RBAC"]
+    M --> N["Row-Level Security Rewrite"]
+    N --> O["Final Re-Validation"]
 
-        D1 --> D2 --> D3 --> D4 --> D5 --> D6
-    end
+    O --> P["SQLite mode=ro"]
+    P --> Q["PRAGMA query_only"]
+    Q --> R["Result Row Limit"]
+    R --> S["Authorized Results"]
 
-    subgraph E["5. Database Execution"]
-        E1[SQLite mode=ro]
-        E2[PRAGMA query_only]
-        E3[Result Row Limiting]
-        E4[Authorized Results]
-
-        E1 --> E2 --> E3 --> E4
-    end
-
-    A4 --> B1
-    B3 --> C1
-    B3 --> C2
-    B3 --> C3
-    B3 --> C4
-    B3 --> C5
-    C6 --> D1
-    D6 --> E1
+    S --> B
 ```
 
 ---
@@ -177,20 +185,41 @@ The project applies defense in depth rather than relying on prompt instructions 
 
 | Layer | Security Control |
 |---:|---|
-| 1 | Send only the role-filtered schema to the selected provider |
+| 1 | Send only role-authorized schema information to the selected provider |
 | 2 | Apply shared Text-to-SQL prompt restrictions |
 | 3 | Parse generated SQL using SQLGlot |
 | 4 | Reject multiple SQL statements |
 | 5 | Permit only `SELECT` queries |
-| 6 | Validate tables against a role-specific allowlist |
-| 7 | Validate requested columns against role permissions |
+| 6 | Validate tables against role-specific permissions |
+| 7 | Validate requested columns |
 | 8 | Apply row-level security rewriting |
-| 9 | Re-validate the rewritten SQL |
+| 9 | Re-validate rewritten SQL |
 | 10 | Open SQLite using `mode=ro` |
 | 11 | Enable `PRAGMA query_only` |
 | 12 | Limit the maximum number of returned rows |
 
-The LLM is responsible only for proposing SQL. Final authorization remains within the backend application.
+The LLM is responsible only for proposing SQL.
+
+Final authorization and database execution remain under deterministic backend control.
+
+---
+
+## Why Generated SQL Is Treated as Untrusted
+
+An LLM may generate SQL that is:
+
+- Syntactically invalid
+- Outside the user's authorization scope
+- Based on unauthorized tables
+- Based on restricted columns
+- Missing required ownership filters
+- Destructive
+- Multi-statement
+- Logically incorrect
+
+For this reason, prompt instructions are not treated as a security boundary.
+
+Every generated query must pass through the deterministic guardrail pipeline before execution.
 
 ---
 
@@ -202,10 +231,12 @@ The sample application includes three demonstration roles.
 
 The Sales Analyst can access:
 
-- `customers`
-- `orders`
-- `order_items`
-- `products`
+```text
+customers
+orders
+order_items
+products
+```
 
 Restrictions:
 
@@ -213,17 +244,22 @@ Restrictions:
 - Restricted access to selected customer columns
 - No row-level restriction
 
+---
+
 ### Sales Manager
 
 The Sales Manager can access:
 
-- All sales-related tables
+- Sales-related tables
 - The `employees` table
-- Broader customer and employee information
+- Broader customer information
+- Broader employee information
 
 Restrictions:
 
 - No row-level restriction
+
+---
 
 ### Account Manager
 
@@ -239,34 +275,75 @@ Restrictions:
 - Backend-enforced row-level security
 - No access to customers assigned to other account managers
 
-> The role selector in the demonstration interface is not a production authentication system.
+> The role selector used by the demonstration interface is not a production authentication system.
 
 ---
 
 ## Row-Level Security
 
-Row-level security is enforced inside the backend and is not left to the LLM.
+Row-level security is enforced in backend application code.
 
-For the Account Manager role, the system modifies authorized queries so that the user can access only:
+It is not delegated to the LLM.
 
-- Customers assigned to that account manager
-- Orders associated with those customers
-- Order items associated with those orders
+For the Account Manager role, the backend can rewrite otherwise valid SQL so that only authorized customer records are accessible.
+
+```text
+Generated SQL
+      |
+      v
+Initial Validation
+      |
+      v
+Role Authorization
+      |
+      v
+RLS Rewrite
+      |
+      v
+Second Validation
+      |
+      v
+Read-Only Execution
+```
 
 The rewritten query is parsed and validated again before execution.
 
-This means that even when the generated SQL does not contain the required ownership filter, the backend applies the restriction before the database query is executed.
+This means a query cannot bypass ownership restrictions simply because the selected model failed to include them.
+
+---
+
+## Generated SQL vs Authorized SQL
+
+One important design decision is keeping both SQL representations visible.
+
+### Generated SQL
+
+The query proposed by the selected Text-to-SQL provider.
+
+### Authorized SQL
+
+The final query after:
+
+- AST validation
+- Single-statement validation
+- `SELECT`-only validation
+- Role authorization
+- Column authorization
+- Row-level security rewriting
+- Final re-validation
+
+This makes it possible to inspect when backend security modifies the model-generated query.
 
 ---
 
 ## Application Modes
 
-The project separates the hosted portfolio demonstration from full local experimentation.
+The project separates the hosted portfolio demonstration from full local provider experimentation.
 
 | Mode | External API Keys | Available Providers | Intended Use |
 |---|---|---|---|
 | Public Demo | Not accepted | Secure Demo Provider | Hosted portfolio demonstration |
-| Local Full | Supplied locally by the user | OpenAI, Gemini, Claude, Ollama | Full local experimentation |
+| Local Full | Supplied locally | OpenAI, Gemini, Claude, Ollama | Full local experimentation |
 
 ---
 
@@ -279,17 +356,18 @@ In this mode:
 - Visitors are not asked to provide API keys
 - API keys are not accepted or processed
 - No external LLM provider calls are made
-- A deterministic local provider handles the documented example questions
-- Generated SQL still passes through the real security pipeline
-- SQLGlot validation remains active
+- A deterministic local provider handles documented example questions
+- Real SQLGlot validation remains active
 - RBAC remains active
 - Row-level security rewriting remains active
 - Read-only SQLite execution remains active
-- Generated SQL and authorized SQL remain visible separately
+- Generated SQL remains visible
+- Authorized SQL remains visible
+- Results come from the actual sample database
 
-Public Demo Mode is the default when `APP_MODE` is not configured.
+The hosted demonstration therefore exercises the real security pipeline instead of returning hard-coded final results.
 
-The hosted demonstration supports only the documented questions available in the sidebar.
+Public Demo Mode is the safe default when `APP_MODE` is not configured.
 
 ---
 
@@ -304,20 +382,51 @@ Supported providers:
 - Anthropic Claude
 - Ollama
 
-Cloud-provider API keys are entered through a password-style field in the local interface for the current request.
+Cloud-provider API keys are supplied locally by the user.
 
-Ollama requires a locally running Ollama server and does not require an API key.
+Ollama requires a locally running Ollama server and does not require an external API key.
 
 Provider objects are constructed per request rather than being permanently cached.
 
-The current interface does not intentionally write API keys to:
+Regardless of the selected model provider, generated SQL must pass through the same deterministic authorization and database-execution pipeline.
 
-- Project files
-- Application settings
-- The SQLite database
-- Explicit Streamlit session-state storage helpers
+---
 
-This behavior is useful for local experimentation but is not a replacement for production secret-management infrastructure.
+## Supported Providers
+
+### Secure Demo Provider
+
+Used in Public Demo Mode.
+
+It generates deterministic SQL for supported example questions without making external API calls.
+
+---
+
+### OpenAI
+
+Available in Local Full Mode using a user-supplied API key and model configuration.
+
+---
+
+### Google Gemini
+
+Available in Local Full Mode using a user-supplied API key and model configuration.
+
+---
+
+### Anthropic Claude
+
+Available in Local Full Mode using a user-supplied Anthropic API key and model configuration.
+
+---
+
+### Ollama
+
+Available in Local Full Mode through a locally running Ollama server.
+
+No external API key is required.
+
+Model availability depends on the models installed locally.
 
 ---
 
@@ -353,39 +462,56 @@ The sample database supports demonstrations involving:
 - Monthly analysis
 - Regional analysis
 - Customer analysis
+- Product analysis
 - Employee portfolio analysis
 - Role-based filtering
 - Row-level security
 
+The dataset contains no real company or customer information.
+
 ---
 
-## Supported Providers
+## Example Questions
 
-### Secure Demo Provider
+### Sales Analyst
 
-The Secure Demo Provider is used in Public Demo Mode.
+```text
+What are the top 5 products by total completed-order revenue?
 
-It generates deterministic SQL for the documented example questions without making external API calls.
+Show monthly completed-order revenue for 2025.
 
-### OpenAI
+Which regions have the highest number of completed orders?
 
-Available in Local Full Mode using a user-supplied API key and model name.
+Which customers placed the most completed orders?
+```
 
-### Google Gemini
+---
 
-Available in Local Full Mode using a user-supplied API key and model name.
+### Sales Manager
 
-### Anthropic Claude
+```text
+Which employees manage the highest-revenue customer portfolios?
 
-Available in Local Full Mode using a user-supplied Anthropic API key and Claude model name.
+Show customer count by account manager.
 
-### Ollama
+Compare completed-order revenue by region.
 
-Available in Local Full Mode through a locally running Ollama server.
+Which products generate the most revenue?
+```
 
-No API key is required.
+---
 
-Model availability and supported model names depend on the selected provider and the user's local or cloud configuration.
+### Account Manager
+
+```text
+Show my assigned customers.
+
+Which of my customers generated the most revenue?
+
+Show completed orders for my customers.
+
+What products were purchased most by my customers?
+```
 
 ---
 
@@ -393,18 +519,23 @@ Model availability and supported model names depend on the selected provider and
 
 | Category | Technology |
 |---|---|
-| Programming language | Python |
-| User interface | Streamlit |
+| Production frontend | Next.js |
+| Frontend language | TypeScript |
+| Backend API | FastAPI |
+| Backend language | Python |
 | Database | SQLite |
 | SQL parsing and validation | SQLGlot |
+| Authorization | RBAC |
+| Row-level security | Backend SQL rewriting |
 | Data processing | Pandas |
-| Testing | Pytest |
 | OpenAI integration | OpenAI SDK |
 | Gemini integration | Google GenAI SDK |
 | Claude integration | Anthropic SDK |
-| Local model integration | Ollama SDK |
-| Configuration | Environment variables |
-| Database security | Read-only URI mode and `PRAGMA query_only` |
+| Local LLM integration | Ollama |
+| Testing | Pytest |
+| Database protection | SQLite `mode=ro` + `PRAGMA query_only` |
+| Frontend deployment | Vercel |
+| Legacy interface | Streamlit |
 
 ---
 
@@ -412,20 +543,21 @@ Model availability and supported model names depend on the selected provider and
 
 ```text
 Text-to-SQL-with-Guardrails/
-├── app.py
 │
-├── assets/
-│   ├── .gitkeep
-│   ├── account-manager-rls.png
-│   ├── sales-analyst-query.png
-│   └── sales-manager-query.png
-│
-├── data/
-│   ├── .gitkeep
-│   └── company.db
-│
-├── scripts/
-│   └── create_sample_db.py
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   ├── lib/
+│   ├── tests/
+│   ├── .env.example
+│   ├── .gitignore
+│   ├── README.md
+│   ├── eslint.config.mjs
+│   ├── next-env.d.ts
+│   ├── next.config.ts
+│   ├── package-lock.json
+│   ├── package.json
+│   └── tsconfig.json
 │
 ├── src/
 │   ├── __init__.py
@@ -457,24 +589,48 @@ Text-to-SQL-with-Guardrails/
 │   ├── test_sample_database.py
 │   └── test_service.py
 │
+├── assets/
+│
+├── data/
+│   ├── .gitkeep
+│   └── company.db
+│
+├── docs/
+│
+├── scripts/
+│   └── create_sample_db.py
+│
+├── .devcontainer/
+│
+├── app.py
 ├── .env.example
 ├── .gitignore
-├── README.md
-└── requirements.txt
+├── requirements.txt
+└── README.md
 ```
+
+The repository retains the original Streamlit implementation in:
+
+```text
+app.py
+```
+
+The current portfolio-facing application uses the newer Next.js frontend and FastAPI service architecture.
 
 ---
 
 ## Installation
 
-### 1. Clone the repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Azoqoz/Text-to-SQL-with-Guardrails.git
 cd Text-to-SQL-with-Guardrails
 ```
 
-### 2. Create a virtual environment
+---
+
+### 2. Create a Python Virtual Environment
 
 #### Windows
 
@@ -490,7 +646,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install the dependencies
+---
+
+### 3. Install Python Dependencies
 
 #### Windows
 
@@ -504,7 +662,9 @@ py -m pip install -r requirements.txt
 python3 -m pip install -r requirements.txt
 ```
 
-### 4. Create the sample database
+---
+
+### 4. Create the Sample Database
 
 #### Windows
 
@@ -520,9 +680,30 @@ python3 scripts/create_sample_db.py
 
 ---
 
+### 5. Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+---
+
 ## Environment Configuration
 
-Copy `.env.example` to `.env` and adjust the settings when needed.
+Copy:
+
+```text
+.env.example
+```
+
+to:
+
+```text
+.env
+```
+
+Example backend configuration:
 
 ```env
 APP_MODE=local_full
@@ -533,16 +714,14 @@ MAX_RESULT_ROWS=200
 LLM_PROVIDER=openai
 
 OPENAI_MODEL=
-
 GEMINI_MODEL=
-
 ANTHROPIC_MODEL=
 
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=
 ```
 
-### Available application modes
+Available application modes:
 
 ```text
 public_demo
@@ -555,31 +734,58 @@ local_full
 public_demo
 ```
 
-### Main settings
+### Main Settings
 
 | Setting | Purpose |
 |---|---|
 | `APP_MODE` | Selects safe public-demo behavior or full local-provider behavior |
 | `DATABASE_PATH` | Defines the SQLite database location |
-| `MAX_RESULT_ROWS` | Limits the maximum number of query results |
+| `MAX_RESULT_ROWS` | Limits the maximum number of returned rows |
 | `LLM_PROVIDER` | Defines the default local provider |
-| `OPENAI_MODEL` | Defines the OpenAI model name |
-| `GEMINI_MODEL` | Defines the Gemini model name |
-| `ANTHROPIC_MODEL` | Defines the Claude model name |
-| `OLLAMA_HOST` | Defines the local Ollama server address |
-| `OLLAMA_MODEL` | Defines the local Ollama model name |
-
-API keys are intentionally not defined inside `AppSettings`.
-
-In Local Full Mode, cloud-provider keys are entered through the Streamlit interface for the current request.
+| `OPENAI_MODEL` | Defines the OpenAI model |
+| `GEMINI_MODEL` | Defines the Gemini model |
+| `ANTHROPIC_MODEL` | Defines the Claude model |
+| `OLLAMA_HOST` | Defines the local Ollama server |
+| `OLLAMA_MODEL` | Defines the local Ollama model |
 
 ---
 
-## Running the Application
+## Modern Frontend Development
+
+The current production frontend lives inside:
+
+```text
+frontend/
+```
+
+Install dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+The Next.js development interface is normally available at:
+
+```text
+http://localhost:3000
+```
+
+The frontend communicates with the FastAPI service layer.
+
+---
+
+## Legacy Streamlit Interface
+
+The original Streamlit application is still available for local experimentation.
 
 ### Public Demo Mode
-
-Public Demo Mode is also used when `APP_MODE` is absent.
 
 #### Windows PowerShell
 
@@ -594,6 +800,8 @@ py -m streamlit run app.py
 export APP_MODE=public_demo
 python3 -m streamlit run app.py
 ```
+
+---
 
 ### Local Full Mode
 
@@ -611,59 +819,40 @@ export APP_MODE=local_full
 python3 -m streamlit run app.py
 ```
 
-Streamlit will display a local URL in the terminal, typically:
+The legacy Streamlit interface normally runs at:
 
 ```text
 http://localhost:8501
 ```
 
-Open the displayed URL in your browser.
-
 ---
 
-## Example Questions
+## Running with Ollama
 
-### Sales Analyst
+Ollama allows local Text-to-SQL generation without a cloud API key.
 
-```text
-What are the top 5 products by total completed-order revenue?
+Start a supported local model through Ollama and configure:
 
-Show monthly completed-order revenue for 2025.
-
-Which regions have the highest number of completed orders?
-
-Which customers placed the most completed orders?
+```env
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=<your-local-model>
 ```
 
-### Sales Manager
+Then run the application in:
 
 ```text
-Which employees manage the highest-revenue customer portfolios?
-
-Show customer count by account manager.
-
-Compare completed-order revenue by region.
-
-Which products generate the most revenue?
+local_full
 ```
 
-### Account Manager
+and select Ollama as the provider.
 
-```text
-Show my assigned customers.
-
-Which of my customers generated the most revenue?
-
-Show completed orders for my customers.
-
-What products were purchased most by my customers?
-```
+Generated SQL still passes through the same deterministic guardrail pipeline.
 
 ---
 
 ## Testing
 
-Run the complete automated test suite with:
+Run the Python test suite with:
 
 ### Windows
 
@@ -688,13 +877,19 @@ The test suite covers:
 - Row-level security
 - Sample database integrity
 - End-to-end service behavior
+- Public-demo guardrail behavior
 
-### Windows temporary-folder workaround
+The exact test count should be taken from the latest local run because the project continues to evolve.
 
-The following command can be used when local Windows permissions prevent Pytest from creating temporary files:
+---
+
+### Windows Temporary-Folder Workaround
+
+If local Windows permissions prevent Pytest from creating temporary files:
 
 ```powershell
 $root = "D:\pytest_aziz"
+
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 
 $run = Join-Path $root (
@@ -704,43 +899,78 @@ $run = Join-Path $root (
 py -m pytest --basetemp="$run"
 ```
 
-This external temporary folder is only a workaround for local Windows permission issues.
+This folder is only a workaround for local Windows permission issues.
 
 ---
 
 ## Deployment
 
-The application can be deployed using Streamlit Community Cloud in Public Demo Mode.
+The modern application separates the production frontend from the backend service.
 
-Recommended configuration:
+### Frontend — Vercel
+
+Production application:
 
 ```text
-Repository: Azoqoz/Text-to-SQL-with-Guardrails
+https://text-to-sql-with-guardrails.vercel.app/
+```
+
+Configuration:
+
+```text
+Platform: Vercel
+Framework: Next.js
+Root Directory: frontend
 Branch: main
-Main file path: app.py
 ```
 
-Add the following Streamlit secret:
+The deployed frontend connects to the FastAPI service through its configured API base URL.
 
-```toml
-APP_MODE = "public_demo"
-```
+The frontend includes handling for backend cold-start behavior so the interface can recover when a free backend instance needs time to wake.
 
-Because `public_demo` is the safe default, no Streamlit secret is required when no other configuration is needed.
+---
 
-The hosted deployment should not configure:
+### Backend Service
+
+The current architecture exposes the Text-to-SQL application logic through FastAPI.
+
+The backend remains responsible for:
+
+- Schema inspection
+- Provider orchestration
+- SQL parsing
+- SQL validation
+- RBAC
+- Row-level security
+- Query rewriting
+- Read-only SQLite execution
+- Result limiting
+
+Security enforcement therefore remains server-side rather than moving into the browser.
+
+---
+
+## Legacy Deployment
+
+The original project supported Streamlit Community Cloud using:
 
 ```text
-OPENAI_API_KEY
-GEMINI_API_KEY
-ANTHROPIC_API_KEY
+app.py
 ```
 
-Public Demo Mode does not request visitor API keys and does not call external providers.
+That deployment architecture is retained only as part of the project's development history.
+
+The current portfolio-facing frontend is:
+
+```text
+Next.js on Vercel
+```
 
 ---
 
 ## Screenshots
+
+The repository also retains screenshots from earlier development stages.
 
 ### Account Manager — Row-Level Security
 
@@ -758,41 +988,42 @@ Public Demo Mode does not request visitor API keys and does not call external pr
 
 ## Extensibility and Real-World Use
 
-The current implementation supports SQLite.
+The current database implementation supports SQLite.
 
 Its modular architecture separates:
 
 - Provider integration
-- Prompt generation
+- Prompt construction
 - Schema inspection
 - SQL parsing
 - SQL validation
 - Role-based access control
 - Row-level security
 - Database execution
-- User-interface logic
+- API behavior
+- Frontend behavior
 
-This structure can serve as a foundation for adding other relational databases.
+This architecture could serve as a foundation for additional relational databases.
 
-Potential targets include:
+Potential future targets include:
 
-- PostgreSQL
-- MySQL
-- Microsoft SQL Server
+```text
+PostgreSQL
+MySQL
+Microsoft SQL Server
+```
 
 Supporting another database would require:
 
 - A database-specific adapter
-- The corresponding SQLGlot dialect
+- An appropriate SQLGlot dialect
 - Database-specific schema inspection
-- A least-privilege read-only database user
+- Least-privilege read-only credentials
 - Adapted query execution
-- Adapted row-level security rules
+- Adapted row-level security logic
 - Database-specific security testing
 
-Other databases are not supported out of the box in the current repository.
-
-In a real internal analytics environment, this architecture could help authorized employees explore approved company data without writing SQL, while keeping query authorization and database execution under backend control.
+These databases are not supported out of the box by the current repository.
 
 ---
 
@@ -806,12 +1037,14 @@ In a real internal analytics environment, this architecture could help authorize
 - The application does not include a query-cost estimator
 - Sensitive-data masking is limited to configured column permissions
 - Provider availability and model names may change
-- Public Demo Mode supports only the documented example questions
-- The system does not measure execution accuracy against a formal evaluation dataset
-- Production deployment would require stronger identity and authorization integration
-- Production deployment would require dedicated secret management
-- Production deployment would require auditing and monitoring
-- Production deployment would require rate limiting and least-privilege credentials
+- Public Demo Mode supports only documented example questions
+- The system does not currently measure SQL execution accuracy against a formal evaluation dataset
+- Production use would require stronger identity and authorization integration
+- Production use would require dedicated secret management
+- Production use would require persistent audit logging
+- Production use would require monitoring
+- Production use would require rate limiting
+- Production databases would require least-privilege service credentials
 
 ---
 
@@ -819,54 +1052,67 @@ In a real internal analytics environment, this architecture could help authorize
 
 - Add production authentication
 - Add identity-provider integration
-- Store authorization policies in a database
+- Store authorization policies in persistent storage
 - Add persistent audit logs
 - Add query timeouts
 - Add SQL complexity limits
 - Add query-cost estimation
 - Add sensitive-column masking
-- Add an evaluation dataset
+- Add a formal Text-to-SQL evaluation dataset
 - Measure SQL execution accuracy
 - Add PostgreSQL support
-- Add MySQL and SQL Server adapters
-- Add a FastAPI backend
+- Add MySQL support
+- Add Microsoft SQL Server support
 - Add production secret management
 - Add rate limiting
 - Add Docker support
 - Add continuous integration
 - Add automated deployment
+- Add structured observability
+- Add query tracing
+- Add database-level policy integration
+- Add model-provider monitoring
 
 ---
 
 ## Why This Project Matters
 
-This project demonstrates that Text-to-SQL systems require more than prompt engineering.
+Text-to-SQL systems require more than prompt engineering.
 
 A production-oriented system must treat LLM-generated SQL as untrusted input and validate it before database execution.
 
-The project demonstrates practical AI Engineering and backend-security skills, including:
+This project demonstrates practical AI Engineering and backend-security concepts including:
 
 - Natural-language-to-SQL generation
 - Multi-provider LLM integration
-- Prompt and schema filtering
+- Schema filtering
+- Prompt construction
 - Abstract Syntax Tree parsing
 - SQL validation
 - Role-based access control
 - Column-level authorization
 - Row-level security
-- Query rewriting
+- SQL rewriting
+- Post-rewrite validation
 - Read-only database execution
-- Safe public-demo design
+- Result limiting
+- Secure public-demo design
 - Provider isolation
-- Secure error handling
+- Safe error handling
+- FastAPI service architecture
+- Next.js frontend development
+- Frontend / backend separation
 - Automated testing
-- Streamlit application development
+- Production deployment
 - Modular software architecture
 
-The project shows how an LLM can be integrated with structured company data while keeping security and authorization decisions outside the model.
+The project demonstrates how an LLM can interact with structured business data while keeping security, authorization, query rewriting, and database execution outside the model.
 
 ---
 
 ## Author
 
 Developed by [Azoqoz](https://github.com/Azoqoz).
+
+**Live Application:**  
+https://text-to-sql-with-guardrails.vercel.app/
