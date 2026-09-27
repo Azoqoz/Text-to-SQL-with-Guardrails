@@ -1113,6 +1113,3 @@ The project demonstrates how an LLM can interact with structured business data w
 ## Author
 
 Developed by [Azoqoz](https://github.com/Azoqoz).
-
-**Live Application:**  
-https://text-to-sql-with-guardrails.vercel.app/
