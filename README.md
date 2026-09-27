@@ -968,23 +968,6 @@ Next.js on Vercel
 
 ---
 
-## Screenshots
-
-The repository also retains screenshots from earlier development stages.
-
-### Account Manager — Row-Level Security
-
-![Account Manager query with backend-enforced row-level security](assets/account-manager-rls.png)
-
-### Sales Analyst — Aggregated Sales Query
-
-![Sales Analyst query over aggregated sales data](assets/sales-analyst-query.png)
-
-### Sales Manager — Broader Employee and Sales Access
-
-![Sales Manager query with broader employee and sales access](assets/sales-manager-query.png)
-
----
 
 ## Extensibility and Real-World Use
 
